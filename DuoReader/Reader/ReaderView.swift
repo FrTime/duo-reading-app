@@ -12,12 +12,11 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showingSettings = false
+    /// The open side panel: settings, contents or search. One at a time.
+    @State private var panel: ReaderPanel?
     @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
     @State private var hinge: OuterCoverPolicy.Hinge = .none
     @State private var outerCoverCamera = OuterCoverCamera.shared
-    @State private var showingContents = false
-    @State private var showingSearch = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -62,27 +61,28 @@ struct ReaderView: View {
                 .toolbarBackgroundVisibility(.visible, for: .navigationBar)
                 .background(pageColor.ignoresSafeArea())
         }
-        .sheet(isPresented: $showingContents) {
-            ReaderContentsView(model: model)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showingSearch) {
-            ReaderSearchView(model: model)
-                .presentationDetents([.large])
-        }
-        // On the open Duo settings dock on the right-hand screen, drawn by
-        // the reader itself (see ReaderSurface) so they meet the crease
-        // exactly; the system inspector lands at widths that vary by pose.
-        // At compact width they show as a sheet. It sits outside the reader's
-        // navigation stack: inside it, the settings' own title and Done
-        // button took over the reader's bar.
-        .sheet(isPresented: Binding(
-            get: { showingSettings && model.settingsSpineX == nil },
-            set: { if !$0 { showingSettings = false } }
-        )) {
-            settingsView(onDone: nil)
-                .presentationDetents([.medium, .large])
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        // On the open Duo panels dock on the right-hand screen, drawn by the
+        // reader itself (see ReaderSurface) so they meet the crease exactly;
+        // the system inspector lands at widths that vary by pose. At compact
+        // width they show as sheets. They sit outside the reader's
+        // navigation stack: inside it, a panel's own title and Done button
+        // took over the reader's bar.
+        .sheet(item: Binding(
+            get: { model.settingsSpineX == nil ? panel : nil },
+            set: { if $0 == nil { panel = nil } }
+        )) { panel in
+            switch panel {
+            case .settings:
+                settingsView(onDone: nil)
+                    .presentationDetents([.medium, .large])
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            case .contents:
+                ReaderContentsView(model: model)
+                    .presentationDetents([.medium, .large])
+            case .search:
+                ReaderSearchView(model: model)
+                    .presentationDetents([.large])
+            }
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
@@ -93,7 +93,7 @@ struct ReaderView: View {
             // `-DuoReaderShowSettings` opens settings once the book is open,
             // for screenshots on simulators where taps don't get through.
             if ProcessInfo.processInfo.arguments.contains("-DuoReaderShowSettings"), model.state == .ready {
-                showingSettings = true
+                panel = .settings
             }
             #endif
         }
@@ -132,6 +132,17 @@ struct ReaderView: View {
         }
     }
 
+    /// A panel docked beside the page, with Done closing it.
+    private func dockedPanel(_ panel: ReaderPanel) -> AnyView {
+        let close = { self.panel = nil }
+        switch panel {
+        // Identity per panel, so switching panels starts the new one fresh.
+        case .settings: return AnyView(settingsView(onDone: close).id(panel))
+        case .contents: return AnyView(ReaderContentsView(model: model, onDone: close).id(panel))
+        case .search: return AnyView(ReaderSearchView(model: model, onDone: close).id(panel))
+        }
+    }
+
     private func settingsView(onDone: (() -> Void)?) -> ReaderSettingsView {
         ReaderSettingsView(
             settings: $model.settings,
@@ -163,11 +174,11 @@ struct ReaderView: View {
         barsShown || model.state != .ready ? .visible : .hidden
     }
 
-    /// The bars hide while settings are open: on the open Duo their buttons
-    /// sit in the side rail, where they'd read as part of the settings panel,
-    /// and settings have their own Done button.
+    /// The bars hide while a panel is open: on the open Duo their buttons
+    /// sit in the side rail, where they'd read as part of the panel, and
+    /// panels have their own Done button.
     private var barsShown: Bool {
-        model.isChromeVisible && !showingSettings
+        model.isChromeVisible && panel == nil
     }
 
     /// The scrubber shows with the bars, unless the pose gives the
@@ -201,9 +212,8 @@ struct ReaderView: View {
             ReaderSurface(
                 model: model,
                 barsShown: barsShown,
-                settingsShown: showingSettings,
-                settings: { settingsView { showingSettings = false } },
-                showSettings: { showingSettings = true }
+                docked: panel.map(dockedPanel),
+                showSettings: { panel = .settings }
             )
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
@@ -230,7 +240,7 @@ struct ReaderView: View {
         }
         ToolbarItem(placement: .primaryAction) {
             Button {
-                showingSettings = true
+                panel = .settings
             } label: {
                 Label("Reading Settings", systemImage: "textformat.size")
             }
@@ -238,9 +248,7 @@ struct ReaderView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                // One panel at a time: settings may be open as a sheet.
-                showingSettings = false
-                showingContents = true
+                panel = .contents
             } label: {
                 Label("Contents", systemImage: "list.bullet")
             }
@@ -249,8 +257,7 @@ struct ReaderView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 model.highlightSearchResult(nil)
-                showingSettings = false
-                showingSearch = true
+                panel = .search
             } label: {
                 Label("Search", systemImage: "magnifyingglass")
             }
@@ -304,9 +311,8 @@ enum ReaderProgressText {
 private struct ReaderSurface: View {
     let model: ReaderModel
     let barsShown: Bool
-    let settingsShown: Bool
-    /// Settings, for docking on the right-hand screen.
-    let settings: () -> ReaderSettingsView
+    /// The open panel, docked on the right-hand screen when it's wide enough.
+    let docked: AnyView?
     let showSettings: () -> Void
     /// The side space to keep clear, as the difference between the safe frame
     /// and the edge-to-edge frame. (A view that ignores the safe area reports
@@ -350,18 +356,18 @@ private struct ReaderSurface: View {
                     }
             }
             .ignoresSafeArea(.container)
-            // Docked settings, from the spine to the right edge. Laid out in
-            // the safe area so their bar clears the status bar and the rail.
+            // A docked panel, from the spine to the right edge. Laid out in
+            // the safe area so its header clears the status bar and the rail.
             .overlay(alignment: .topTrailing) {
-                if settingsShown, let spine = model.settingsSpineX {
+                if let docked, let spine = model.settingsSpineX {
                     let frame = safe.frame(in: .global)
-                    settings()
+                    docked
                         .frame(width: max(0, frame.maxX - spine))
                         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
                         .transition(.move(edge: .trailing))
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: settingsShown)
+            .animation(.easeInOut(duration: 0.25), value: docked == nil)
         }
     }
 

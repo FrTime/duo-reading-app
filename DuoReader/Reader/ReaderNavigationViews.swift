@@ -4,10 +4,12 @@ import SwiftUI
 /// The table of contents. Tapping a chapter jumps there.
 struct ReaderContentsView: View {
     let model: ReaderModel
+    /// Closes the panel when it's docked beside the page. Nil when a sheet.
+    var onDone: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        ReaderPanelContainer(title: "Contents", onDone: onDone) {
             Group {
                 if model.tableOfContents.isEmpty {
                     ContentUnavailableView(
@@ -22,7 +24,7 @@ struct ReaderContentsView: View {
                             Button {
                                 Task {
                                     await model.go(to: entry.link)
-                                    dismiss()
+                                    close()
                                 }
                             } label: {
                                 HStack {
@@ -50,25 +52,21 @@ struct ReaderContentsView: View {
                     }
                 }
             }
-            .navigationTitle("Contents")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Done", systemImage: "checkmark")
-                    }
-                }
-            }
         }
+    }
+
+    private func close() {
+        if let onDone { onDone() } else { dismiss() }
     }
 }
 
 /// Full-text search with each match shown in context.
 struct ReaderSearchView: View {
     let model: ReaderModel
+    /// Closes the panel when it's docked beside the page. Nil when a sheet.
+    var onDone: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var fieldFocused: Bool
     @State private var query = ""
     @State private var results: [Locator] = []
     @State private var isSearching = false
@@ -76,62 +74,72 @@ struct ReaderSearchView: View {
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isSearching {
-                    ProgressView("Searching…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if searchedQuery.isEmpty {
-                    ContentUnavailableView(
-                        "Search This Book",
-                        systemImage: "magnifyingglass",
-                        description: Text("Find every place a word or phrase appears.")
-                    )
-                } else if results.isEmpty {
-                    ContentUnavailableView.search(text: searchedQuery)
-                } else {
-                    List(Array(results.enumerated()), id: \.offset) { _, locator in
-                        Button {
-                            Task {
-                                await model.go(to: locator)
-                                model.highlightSearchResult(locator)
-                                dismiss()
-                            }
-                        } label: {
-                            SearchResultRow(locator: locator)
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                    .safeAreaInset(edge: .top) {
-                        Text("^[\(results.count) result](inflect: true)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal)
-                            .padding(.vertical, 4)
-                            .background(.bar)
-                    }
+        ReaderPanelContainer(title: "Search", onDone: onDone) {
+            VStack(spacing: 0) {
+                if onDone != nil {
+                    // Docked, there's no navigation bar to hold the system
+                    // search field.
+                    TextField("Words or a phrase", text: $query)
+                        .textFieldStyle(.roundedBorder)
+                        .submitLabel(.search)
+                        .autocorrectionDisabled()
+                        .focused($fieldFocused)
+                        .onSubmit { runSearch() }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                        .onAppear { fieldFocused = true }
                 }
+                results
             }
-            .navigationTitle("Search")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Words or a phrase")
-            .onSubmit(of: .search) { runSearch() }
+            .modifier(SystemSearchField(isEnabled: onDone == nil, query: $query, onSubmit: runSearch))
             .onChange(of: query) { _, text in
                 // Clearing the field goes back to the start screen.
                 if text.isEmpty { cancelSearch(); searchedQuery = ""; results = [] }
             }
             .onDisappear { cancelSearch() }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Done", systemImage: "checkmark")
+        }
+    }
+
+    @ViewBuilder
+    private var results: some View {
+        if isSearching {
+            ProgressView("Searching…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if searchedQuery.isEmpty {
+            ContentUnavailableView(
+                "Search This Book",
+                systemImage: "magnifyingglass",
+                description: Text("Find every place a word or phrase appears.")
+            )
+        } else if results.isEmpty {
+            ContentUnavailableView.search(text: searchedQuery)
+        } else {
+            List(Array(results.enumerated()), id: \.offset) { _, locator in
+                Button {
+                    Task {
+                        await model.go(to: locator)
+                        model.highlightSearchResult(locator)
+                        close()
                     }
+                } label: {
+                    SearchResultRow(locator: locator)
                 }
+                .foregroundStyle(.primary)
+            }
+            .safeAreaInset(edge: .top) {
+                Text("^[\(results.count) result](inflect: true)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
+                    .background(.bar)
             }
         }
+    }
+
+    private func close() {
+        if let onDone { onDone() } else { dismiss() }
     }
 
     private func runSearch() {
@@ -154,6 +162,23 @@ struct ReaderSearchView: View {
         searchTask?.cancel()
         searchTask = nil
         isSearching = false
+    }
+}
+
+/// The system search field in the navigation bar, for the sheet.
+private struct SystemSearchField: ViewModifier {
+    let isEnabled: Bool
+    @Binding var query: String
+    let onSubmit: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Words or a phrase")
+                .onSubmit(of: .search) { onSubmit() }
+        } else {
+            content
+        }
     }
 }
 
