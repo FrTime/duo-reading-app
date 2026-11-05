@@ -188,18 +188,21 @@ private struct SearchResultRow: View {
 }
 
 /// A slider through the whole book. Moving it previews the percentage;
-/// letting go jumps there.
+/// letting go, or pausing, jumps there.
 struct ReaderScrubber: View {
     let model: ReaderModel
     @State private var draft: Double?
     @State private var pendingJump: Task<Void, Never>?
-    @State private var isDragging = false
+    /// True while the thumb is moving and shortly after, so "Back" doesn't
+    /// appear and shorten the track under the finger.
+    @State private var isInteracting = false
+    @State private var interactionEnd: Task<Void, Never>?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// VoiceOver swipes up or down move this far through the book.
     static let accessibilityStep = 0.05
-    /// Value changes outside a drag (keyboard, assistive tech) jump after
-    /// this pause.
+    /// A pause this long jumps. The slider's end-of-drag report can't be
+    /// relied on (it never arrives in the simulator), so this is the main path.
     static let settleDelay: Duration = .milliseconds(450)
 
     var body: some View {
@@ -207,7 +210,6 @@ struct ReaderScrubber: View {
         HStack(spacing: 12) {
             VStack(spacing: 2) {
                 Slider(value: Binding(get: { value }, set: { setDraft($0) }), in: 0 ... 1) { editing in
-                    isDragging = editing
                     if !editing { jumpToDraft() }
                 }
                 .accessibilityLabel("Position in Book")
@@ -239,17 +241,25 @@ struct ReaderScrubber: View {
             }
             .frame(maxWidth: 520)
 
-            ReturnToPlaceButton(model: model)
+            if !isInteracting {
+                ReturnToPlaceButton(model: model)
+            }
         }
-        .onChange(of: model.progression) { draft = nil }
+        .onChange(of: model.progression) { if !isInteracting { draft = nil } }
     }
 
     private func setDraft(_ value: Double) {
         draft = value
+        isInteracting = true
+        interactionEnd?.cancel()
+        interactionEnd = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            isInteracting = false
+            // The page has arrived by now; show its real position.
+            draft = nil
+        }
         pendingJump?.cancel()
-        // While dragging, only letting go jumps: jumping mid-drag would show
-        // "Back" and shorten the track under the finger.
-        guard !isDragging else { return }
         pendingJump = Task {
             try? await Task.sleep(for: Self.settleDelay)
             guard !Task.isCancelled else { return }
