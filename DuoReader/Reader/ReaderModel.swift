@@ -298,21 +298,17 @@ final class ReaderModel {
     /// Goes to a contents entry, remembering where the reader was.
     func go(to link: Link) async {
         guard let navigator else { return }
-        let from = currentLocator
+        rememberReturnPoint(currentLocator)
         highlightSearchResult(nil)
-        if await navigator.go(to: link, options: NavigatorGoOptions(animated: false)) {
-            rememberReturnPoint(from)
-        }
+        _ = await navigator.go(to: link, options: NavigatorGoOptions(animated: false))
     }
 
     /// Goes to a position, e.g. a search result, remembering where the reader was.
     func go(to locator: Locator) async {
         guard let navigator else { return }
-        let from = currentLocator
+        rememberReturnPoint(currentLocator)
         highlightSearchResult(nil)
-        if await navigator.go(to: locator, options: NavigatorGoOptions(animated: false)) {
-            rememberReturnPoint(from)
-        }
+        _ = await navigator.go(to: locator, options: NavigatorGoOptions(animated: false))
     }
 
     /// Goes to a point through the whole book, from 0 to 1 (the scrubber).
@@ -369,8 +365,8 @@ final class ReaderModel {
         guard let publication, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         nonisolated(unsafe) let source = publication
         guard case let .success(iterator) = await source.search(query: query) else { return [] }
+        // The iterator frees its resources when it's released.
         nonisolated(unsafe) let pages = iterator
-        defer { pages.close() }
         var results: [Locator] = []
         while results.count < limit, !Task.isCancelled {
             guard case let .success(page?) = await pages.next() else { break }

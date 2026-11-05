@@ -33,15 +33,27 @@ struct ReaderView: View {
                             .padding([.bottom, .trailing], 12)
                     }
                 }
+                // The scrubber is a bar of its own, not a toolbar item: on the
+                // Duo the system can fold toolbars into the side rail, where
+                // a slider gets squeezed and its drag lost.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsScrubber {
+                        ReaderScrubber(model: model)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(pageColor)
+                            .transition(.opacity)
+                    }
+                }
                 .navigationTitle(model.book.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .toolbarVisibility(chromeVisibility, for: .navigationBar)
-                .toolbarVisibility(bottomBarVisibility, for: .bottomBar)
-                .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
+                .toolbarColorScheme(pageColorScheme, for: .navigationBar)
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
-                .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
+                .toolbarBackground(pageColor, for: .navigationBar)
                 .background(pageColor.ignoresSafeArea())
         }
         .sheet(isPresented: $showingContents) {
@@ -131,10 +143,10 @@ struct ReaderView: View {
         model.isChromeVisible || model.state != .ready ? .visible : .hidden
     }
 
-    /// The bottom bar's progress moves into the side panel when the pose
-    /// gives the controls their own space.
-    private var bottomBarVisibility: Visibility {
-        model.layout?.controlsFrame != nil ? .hidden : chromeVisibility
+    /// The scrubber shows with the bars, unless the pose gives the
+    /// controls a panel of their own.
+    private var showsScrubber: Bool {
+        model.isChromeVisible && model.state == .ready && model.layout?.controlsFrame == nil
     }
 
     @ViewBuilder
@@ -155,10 +167,6 @@ struct ReaderView: View {
             }
         case .ready:
             ReaderSurface(model: model) { showingSettings = true }
-                // Edge to edge: Readium insets the page for the top and bottom
-                // safe areas itself, and the layout keeps the page clear of
-                // the side rail while centring a spread on the hinge.
-                .ignoresSafeArea(.container)
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -210,10 +218,6 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready || !model.isSearchable)
         }
-        ToolbarItem(placement: .bottomBar) {
-            ReaderScrubber(model: model)
-                .disabled(model.state != .ready)
-        }
     }
 }
 
@@ -235,6 +239,8 @@ struct ReaderProgressLabel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                // Bars propose a narrow width; show the whole line.
+                .fixedSize()
         }
         .accessibilityElement(children: .combine)
     }
@@ -260,22 +266,55 @@ enum ReaderProgressText {
 private struct ReaderSurface: View {
     let model: ReaderModel
     let showSettings: () -> Void
-    @Environment(\.layoutDirection) private var layoutDirection
+    /// The side space to keep clear, as the difference between the safe frame
+    /// and the edge-to-edge frame. (A view that ignores the safe area reports
+    /// zero insets, so they're measured this way.) Global coordinates are
+    /// physical left to right, as the Duo's panels are.
+    private static func sideInsets(safe: CGRect, full: CGRect) -> ReaderLayout.SideInsets {
+        ReaderLayout.SideInsets(left: max(0, safe.minX - full.minX), right: max(0, full.maxX - safe.maxX))
+    }
 
-    /// The layout works in physical left and right, the way the Duo's panels are.
-    private func sideInsets(_ insets: EdgeInsets) -> ReaderLayout.SideInsets {
-        layoutDirection == .rightToLeft
-            ? ReaderLayout.SideInsets(left: insets.trailing, right: insets.leading)
-            : ReaderLayout.SideInsets(left: insets.leading, right: insets.trailing)
+    /// The widest side insets seen at the current size. The rail holds the
+    /// bars, so it comes and goes as the bars show and hide; keeping the
+    /// widest means the page doesn't re-paginate on every tap, and text never
+    /// ends up under the rail when the bars come back.
+    @State private var railInsets: RailInsets?
+
+    struct RailInsets: Equatable {
+        var size: CGSize
+        var insets: ReaderLayout.SideInsets
     }
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { safe in
+            // Edge to edge: Readium insets the page for the top and bottom
+            // safe areas itself, and the layout keeps the page clear of the
+            // side rail while centring a spread on the hinge.
+            GeometryReader { full in
+                let measured = Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global))
+                let kept = railInsets?.size == full.size ? railInsets?.insets : nil
+                let insets = Self.widest(measured, kept)
+                surface(in: full, insets: insets)
+                    .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
+                        railInsets = new
+                    }
+            }
+            .ignoresSafeArea(.container)
+        }
+    }
+
+    static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {
+        guard let b else { return a }
+        return ReaderLayout.SideInsets(left: max(a.left, b.left), right: max(a.right, b.right))
+    }
+
+    private func surface(in proxy: GeometryProxy, insets: ReaderLayout.SideInsets) -> some View {
+        Group {
             let fold = proxy.reservedRegions(kind: .division).first?.frame
             let layout = ReaderLayout.resolve(
                 size: proxy.size,
                 fold: fold,
-                insets: sideInsets(proxy.safeAreaInsets),
+                insets: insets,
                 spread: model.settings.spread,
                 flow: model.settings.flow
             )
