@@ -7,9 +7,10 @@ import ReadiumZIPFoundation
 /// any other book, including two-page spreads on the Duo's inner display, and
 /// saved places work the same way.
 ///
-/// `ComicInfo.xml` (the ComicRack format most CBZ files carry) fills in the
+/// `ComicInfo.xml` (the ComicRack format some CBZ files carry) fills in the
 /// title, series and number, writers, summary, language and manga reading
-/// direction. Pages are copied without recompressing.
+/// direction. Without it, the title, series and volume come from the file
+/// name (`FileNameTitle`). Pages are copied without recompressing.
 public struct ComicConverter: FileConverter {
     /// A single page bigger than this is not a comic page.
     static let maxPageBytes: Int64 = 60 * 1024 * 1024
@@ -58,7 +59,14 @@ public struct ComicConverter: FileConverter {
             manifest.append(page)
         }
 
-        let title = info.displayTitle ?? BookConverters.title(for: source)
+        // Most CBZ files have no ComicInfo.xml, only a release name such as
+        // "Claymore v15 (2009) (Digital) (Group).cbz". Read what it can tell us.
+        let fromName = FileNameTitle(fileName: source.lastPathComponent)
+        let title = info.displayTitle ?? fromName.title
+        if info.series == nil, let series = fromName.series {
+            info.series = series
+            info.number = fromName.seriesIndex.map(FileNameTitleParser.number)
+        }
         try await Self.add("OEBPS/nav.xhtml", Data(Self.navigation(title: title, first: manifest[0]).utf8), to: output)
         try await Self.add("OEBPS/content.opf", Data(Self.packageDocument(title: title, info: info, pages: manifest).utf8), to: output)
     }

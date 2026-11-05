@@ -19,6 +19,11 @@ extension DuoReaderSchemaV1 {
         public var formatRawValue: String
 
         public var title: String
+        /// The name of the file the user imported, such as
+        /// "Claymore v15 (2009) (Digital).cbz". Kept so a title made from it
+        /// can be cleaned up again or put back. Nil for books imported before
+        /// file names were kept.
+        public var originalFileName: String?
         public var authors: [String]
         public var series: String?
         public var seriesIndex: Double?
@@ -78,6 +83,7 @@ extension DuoReaderSchemaV1 {
         /// the title when the file has none.
         public func apply(_ metadata: BookMetadata, fileURL: URL) {
             title = metadata.title ?? BookMetadata.fallbackTitle(for: fileURL)
+            originalFileName = fileURL.lastPathComponent
             authors = metadata.authors
             series = metadata.series
             seriesIndex = metadata.seriesIndex
