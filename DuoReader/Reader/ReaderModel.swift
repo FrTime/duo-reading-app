@@ -29,36 +29,10 @@ final class ReaderModel {
     /// Whether the top and bottom bars are showing.
     var isChromeVisible = true
 
-    /// Where docked settings should start: the spine (the fold, or the
-    /// middle of a flat screen), in window coordinates. Nil when the screen
-    /// is too narrow to dock them. Set by the view.
-    var settingsSpineX: CGFloat? {
-        didSet { if settingsSpineX != oldValue { settingsColumnExtra = nil } }
-    }
-    /// The window width that goes with `settingsSpineX`.
-    @ObservationIgnored var settingsWindowWidth: CGFloat = 0
-    /// How much wider the inspector lands than the width it's given (on the
-    /// open Duo, its side rail adds some). Measured once per spine from the
-    /// first layout, then kept: re-measuring while a new width is still
-    /// settling would compound.
-    private var settingsColumnExtra: CGFloat?
-
-    /// Width for docked settings so they start at the spine. Nil lets the
-    /// inspector choose.
-    var settingsColumnWidth: CGFloat? {
-        settingsSpineX.map { settingsWindowWidth - $0 - (settingsColumnExtra ?? 0) }
-    }
-
-    /// Called with the docked settings' left edge, in window coordinates.
-    func settingsPanelLanded(atX leftEdge: CGFloat) {
-        guard settingsColumnExtra == nil, let spine = settingsSpineX else { return }
-        let given = settingsWindowWidth - spine
-        let landed = settingsWindowWidth - leftEdge
-        let extra = landed - given
-        // Ignore anything far off: the panel is a sheet, or still arriving.
-        guard abs(extra) < 160 else { return }
-        if abs(extra) > 1 { settingsColumnExtra = extra } else { settingsColumnExtra = 0 }
-    }
+    /// Where docked settings start: the spine (the fold, or the middle of a
+    /// flat screen), in window coordinates. Nil when the screen is too
+    /// narrow to dock them, so they show as a sheet. Set by the view.
+    var settingsSpineX: CGFloat?
 
     /// A web or mail link the reader tapped, waiting for confirmation.
     var pendingExternalURL: URL?

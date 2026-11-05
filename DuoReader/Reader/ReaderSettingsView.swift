@@ -11,6 +11,8 @@ struct ReaderSettingsView: View {
     var isReflowable = true
     /// Whether to offer the outer-screen cover, and what to say about it.
     var outerCoverStatus: OuterCoverPolicy.Status = .unsupported
+    /// Closes settings when they're docked in the reader rather than presented.
+    var onDone: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -39,7 +41,7 @@ struct ReaderSettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        dismiss()
+                        if let onDone { onDone() } else { dismiss() }
                     } label: {
                         Label("Done", systemImage: "checkmark")
                     }
