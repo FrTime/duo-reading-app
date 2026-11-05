@@ -361,7 +361,6 @@ struct ShelfView: View {
                 setCenter(start + Float(flick) / camera.scale, animated: !reduceMotion)
             }
     }
-    }
 
     private func scroll(by delta: Float, animated: Bool) {
         setCenter(centerY + delta, animated: animated)
