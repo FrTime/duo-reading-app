@@ -32,7 +32,9 @@ public struct MarkdownConverter: BookConverter {
             authors: authors,
             chapters: TextBlock.chapters(from: blocks, splitLevel: levels.min())
         )
-        if let language = front["lang"] ?? front["language"] { document.language = language }
+        if let language = front["lang"] ?? front["language"] ?? BookConverters.detectLanguage(body) {
+            document.language = language
+        }
         document.summary = front["description"] ?? front["summary"]
         return document
     }

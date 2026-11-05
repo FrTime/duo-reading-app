@@ -19,6 +19,8 @@ public enum ImportFailure: Error, Sendable, Equatable {
     case unreadable
     /// The file couldn't be copied into the library (permissions, disk space).
     case copyFailed
+    /// Over the size limit for its format (see `BookConverters.maxSourceBytes`).
+    case tooLarge
 }
 
 /// Copies files into the library and creates their `Book`s, off the main actor.
@@ -96,7 +98,8 @@ public actor LibraryImporter {
                 try await EPUBWriter.write(converter.document(from: url), to: temporary)
             } catch {
                 try? FileManager.default.removeItem(at: temporary)
-                return .failed(fileName: fileName, reason: .unreadable)
+                let reason: ImportFailure = (error as? ConversionError) == .tooLarge ? .tooLarge : .unreadable
+                return .failed(fileName: fileName, reason: reason)
             }
             convertedCopy = temporary
             source = temporary

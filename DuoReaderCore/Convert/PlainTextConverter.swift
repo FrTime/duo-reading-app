@@ -21,7 +21,7 @@ public struct PlainTextConverter: BookConverter {
             authors: header.author.map { [$0] } ?? [],
             chapters: TextBlock.chapters(from: blocks, splitLevel: hasHeadings ? 1 : nil)
         )
-        if let language = header.language { document.language = language }
+        if let language = header.language ?? BookConverters.detectLanguage(text) { document.language = language }
         return document
     }
 

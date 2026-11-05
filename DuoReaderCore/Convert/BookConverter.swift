@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 /// Turns a file the reader can't open directly into an `EPUBDocument`.
 public protocol BookConverter: Sendable {
@@ -53,6 +54,16 @@ public enum BookConverters {
         // Lots of NULs means a binary file with a text extension.
         if text.utf8.prefix(4096).filter({ $0 == 0 }).count > 8 { throw ConversionError.unreadable }
         return text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    /// The language of a sample of the text, as a BCP 47 code, when it's clear.
+    /// Converted books need one so VoiceOver and hyphenation use the right language.
+    static func detectLanguage(_ text: String) -> String? {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(String(text.prefix(4000)))
+        guard let best = recognizer.languageHypotheses(withMaximum: 1).first,
+              best.value >= 0.6, best.key != .undetermined else { return nil }
+        return best.key.rawValue
     }
 
     /// The title to use when the file itself doesn't name one.

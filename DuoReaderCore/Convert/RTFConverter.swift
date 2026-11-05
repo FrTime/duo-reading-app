@@ -25,11 +25,13 @@ public struct RTFConverter: BookConverter {
         let source = String(decoding: data.prefix(64 * 1024), as: UTF8.self)
         let title = Self.infoField("title", in: source)
         let author = Self.infoField("author", in: source)
-        return EPUBDocument(
+        var document = EPUBDocument(
             title: title.flatMap { $0.isEmpty ? nil : $0 } ?? BookConverters.title(for: url),
             authors: author.flatMap { $0.isEmpty ? nil : [$0] } ?? [],
             chapters: TextBlock.chapters(from: blocks, splitLevel: hasHeadings ? 1 : nil)
         )
+        if let language = BookConverters.detectLanguage(string.string) { document.language = language }
+        return document
     }
 
     /// The text of `{\title …}` or `{\author …}` in the RTF header.

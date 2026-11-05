@@ -71,6 +71,12 @@ struct PlainTextConverterTests {
         #expect(blocks == [.paragraph(inline: "First line."), .paragraph(inline: "Second line."), .paragraph(inline: "Third line.")])
     }
 
+    @Test func detectsTheLanguageWhenTheFileDoesNotSayIt() {
+        let french = "Il était une fois une petite fille qui vivait au bord de la mer avec sa grand-mère. Chaque matin, elle descendait sur la plage pour regarder les bateaux partir."
+        #expect(PlainTextConverter.document(fromText: french, fallbackTitle: "conte").language == "fr")
+        #expect(BookConverters.detectLanguage("ok") == nil)
+    }
+
     @Test func usesTheFileNameWithoutAHeader() {
         let doc = PlainTextConverter.document(fromText: "Just a story.", fallbackTitle: "my story")
         #expect(doc.title == "my story")
@@ -265,6 +271,17 @@ struct TextImportTests {
         #expect(await importer.importFile(url) == .failed(fileName: "junk.txt", reason: .unreadable))
         #expect(try container.mainContext.fetch(FetchDescriptor<Book>()).isEmpty)
         #expect((try? FileManager.default.contentsOfDirectory(atPath: booksFolder.path()))?.isEmpty ?? true)
+    }
+
+    @Test func oversizedTextFilesSayWhy() async throws {
+        let url = Fixtures.temporaryURL("huge.txt")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: url.path(), contents: nil)
+        // A sparse file: reports the size without writing 50 MB.
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(BookConverters.maxSourceBytes + 1))
+        try handle.close()
+        #expect(await importer.importFile(url) == .failed(fileName: "huge.txt", reason: .tooLarge))
     }
 
     @Test func textFormatsAreOffered() {
