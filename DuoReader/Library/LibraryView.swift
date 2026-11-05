@@ -107,6 +107,8 @@ struct LibraryView: View {
             case .shelf where searchText.isEmpty:
                 ShelfView(onOpen: open, onDelete: { bookPendingDelete = $0 })
                     .ignoresSafeArea(edges: .bottom)
+                    // Light title and buttons over the dark wood.
+                    .toolbarColorScheme(.dark, for: .navigationBar)
             case .shelf, .grid: grid
             case .list: list
             }
