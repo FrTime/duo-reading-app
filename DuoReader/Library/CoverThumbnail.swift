@@ -12,7 +12,9 @@ final class CoverThumbnailCache: @unchecked Sendable {
     init() { cache.countLimit = 300 }
 
     func image(for id: UUID, data: Data, maxPixel: Int) async -> UIImage? {
-        let key = "\(id.uuidString)-\(maxPixel)" as NSString
+        // Keyed by content too, so a new cover from the cover builder isn't
+        // served from a stale cache entry.
+        let key = "\(id.uuidString)-\(maxPixel)-\(data.hashValue)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
         let image = await Task.detached(priority: .userInitiated) {
             Self.downsample(data, maxPixel: maxPixel)
@@ -60,8 +62,10 @@ struct BookCoverView: View {
             }
             .clipShape(.rect(cornerRadius: 4))
             .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-            .task(id: book.coverImageData?.count) {
-                guard let data = book.coverImageData else { image = nil; return }
+            // The thumbnail is small and stored inline, so reading it here is
+            // cheap; the full cover (external storage) is never touched.
+            .task(id: book.coverThumbnailData) {
+                guard let data = book.coverThumbnailData else { image = nil; return }
                 image = await CoverThumbnailCache.shared.image(for: book.id, data: data, maxPixel: maxPixel)
             }
             .accessibilityHidden(true)

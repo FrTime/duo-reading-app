@@ -33,7 +33,10 @@ extension DuoReaderSchemaV1 {
         public var ao3: AO3Metadata?
         /// Cover image bytes from the file, kept outside the store so library
         /// queries stay fast.
-        @Attribute(.externalStorage) public var coverImageData: Data?
+        @Attribute(.externalStorage) public private(set) var coverImageData: Data?
+        /// A small JPEG of the cover (about 480 px) for grids and lists. Stored
+        /// inline so scrolling the library never loads full covers.
+        public private(set) var coverThumbnailData: Data?
 
         public var dateAdded: Date
         public var lastOpened: Date?
@@ -83,7 +86,14 @@ extension DuoReaderSchemaV1 {
             subjects = metadata.subjects
             identifiers = metadata.identifiers
             ao3 = metadata.ao3
-            coverImageData = metadata.coverImageData
+            setCover(metadata.coverImageData)
+        }
+
+        /// Replaces the cover and its thumbnail together. Always set covers
+        /// through this so the library thumbnail never goes stale.
+        public func setCover(_ data: Data?) {
+            coverImageData = data
+            coverThumbnailData = data.flatMap { CoverImage.thumbnail(from: $0) }
         }
 
         /// Authors for display, e.g. "A, B and C", or "Unknown author" when there are none.
