@@ -114,7 +114,7 @@ struct LibraryView: View {
             ContentUnavailableView.search(text: searchText)
         } else {
             switch layout {
-            case .shelf where searchText.isEmpty:
+            case .shelf where showsShelf:
                 ShelfView(onOpen: open, onEditCover: { editingBook = $0 }, onDelete: { bookPendingDelete = $0 })
                     .ignoresSafeArea(edges: .bottom)
                     // Light title and buttons over the dark wood.
@@ -176,9 +176,20 @@ struct LibraryView: View {
         }
         ToolbarItem(placement: .secondaryAction) {
             Menu {
-                Picker("Sort By", selection: $sort) {
-                    ForEach(LibrarySort.allCases) { option in
-                        Text(option.label).tag(option)
+                if showsShelf {
+                    // The shelf always shows the user's own order, so here
+                    // sorting rearranges the books on it (they can still be
+                    // dragged around afterwards).
+                    Menu("Arrange Shelf By", systemImage: "arrow.up.arrow.down") {
+                        ForEach(LibrarySort.allCases.filter { $0 != .shelf }) { option in
+                            Button(option.label) { arrangeShelf(by: option) }
+                        }
+                    }
+                } else {
+                    Picker("Sort By", selection: $sort) {
+                        ForEach(LibrarySort.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
                     }
                 }
                 Picker("View As", selection: $layout) {
@@ -189,6 +200,16 @@ struct LibraryView: View {
             } label: {
                 Label("Sort and View", systemImage: "arrow.up.arrow.down")
             }
+        }
+    }
+
+    /// The 3D shelf is showing (it gives way to the grid while searching).
+    private var showsShelf: Bool { layout == .shelf && searchText.isEmpty }
+
+    private func arrangeShelf(by option: LibrarySort) {
+        withAnimation {
+            guard LibraryQuery.arrangeShelf(allBooks, by: option) else { return }
+            try? modelContext.save()
         }
     }
 
