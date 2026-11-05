@@ -51,20 +51,39 @@ private struct NowReadingSmallView: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             CoverArtwork(book: book)
-            Gauge(value: book.progress) {
-                Text("Progress")
-            } currentValueLabel: {
-                Text("\(book.percent)%")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(book.baseColor.textColor(showsBackground: showsBackground))
-            .foregroundStyle(book.baseColor.textColor(showsBackground: showsBackground))
-            .frame(width: 40)
+            // Drawn by hand: the accessory gauge styles have a fixed size of
+            // about 58 pt, which pushed past the widget's margins.
+            ProgressRing(progress: book.progress, percent: book.percent,
+                         color: book.baseColor.textColor(showsBackground: showsBackground))
+                .frame(width: 40, height: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(book.accessibilityDescription)
+    }
+}
+
+/// A ring that fills with progress, with the percentage inside.
+private struct ProgressRing: View {
+    var progress: Double
+    var percent: Int
+    var color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.3), lineWidth: 4)
+            Circle()
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .widgetAccentable()
+            Text("\(percent)%")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(color)
+        }
+        .padding(2)
     }
 }
 
