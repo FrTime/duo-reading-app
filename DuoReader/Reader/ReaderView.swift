@@ -31,16 +31,18 @@ struct ReaderView: View {
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
-                // On a wide screen (an open Duo) settings dock at the side so
-                // the page stays visible and live; at compact width the
-                // inspector shows as a sheet. One presenter, so folding or
-                // unfolding with settings open doesn't close them.
-                .inspector(isPresented: $showingSettings) {
-                    ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
-                        .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
-                        .presentationDetents([.medium, .large])
-                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                }
+        }
+        // On a wide screen (an open Duo) settings dock at the side so the page
+        // stays visible and live; at compact width the inspector shows as a
+        // sheet. One presenter, so folding or unfolding with settings open
+        // doesn't close them. It sits outside the reader's navigation stack:
+        // inside it, the settings' own title and Done button took over the
+        // reader's bar.
+        .inspector(isPresented: $showingSettings) {
+            ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+                .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                .presentationDetents([.medium, .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
