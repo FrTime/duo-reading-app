@@ -57,6 +57,19 @@ struct ComicConverterTests {
         return output
     }
 
+    /// A manga-volume-sized comic: 100 pages of 500 KB. Prints how long
+    /// conversion takes, so a slowdown shows up in test logs.
+    @Test func convertsAVolumeSizedComicPromptly() async throws {
+        var page = Data([0xFF, 0xD8, 0xFF, 0xE0])
+        page += Data((0..<(500 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        let files = (1...100).map { (String(format: "vol/%03d.jpg", $0), page) }
+        let source = try await Self.zip(files, name: "volume.cbz")
+        let clock = ContinuousClock()
+        let elapsed = try await clock.measure { _ = try await convert(source) }
+        print("Converted a 100-page, 50 MB comic in \(elapsed)")
+        #expect(elapsed < .seconds(30))
+    }
+
     @Test func pagesComeInNaturalOrderWithComicInfoMetadata() async throws {
         let epub = try await convert(try await Self.sampleComic())
 
