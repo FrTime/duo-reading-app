@@ -65,6 +65,13 @@ struct CoverImagePanel: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    Toggle("Show the whole image", isOn: Binding(
+                        get: { model.design.fitsWholeImage == true },
+                        set: { model.design.fitsWholeImage = $0 ? true : nil }
+                    ))
+                    Text("Off fills the front and crops the edges. On fits the whole picture, with a soft blur of it behind.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     Button("Reset position", systemImage: "arrow.counterclockwise") {
                         model.resetCrop()
                     }
@@ -349,6 +356,23 @@ struct CoverBookPanel: View {
                     Text("Thick").font(.caption)
                 }
                 Text("Starts from the book's length. A thicker spine has room for larger text.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading) {
+                Text("Book size")
+                    .font(.subheadline)
+                Slider(value: Binding(
+                    get: { model.design.sizeScale(for: model.book.id) },
+                    set: { model.design.heightScale = $0 }
+                ), in: CoverDesign.heightScaleRange) {
+                    Text("Book size")
+                } minimumValueLabel: {
+                    Image(systemName: "book.closed").font(.caption)
+                } maximumValueLabel: {
+                    Image(systemName: "book.closed").font(.title3)
+                }
+                Text("Taller or shorter than its neighbours on the shelf, like real books.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

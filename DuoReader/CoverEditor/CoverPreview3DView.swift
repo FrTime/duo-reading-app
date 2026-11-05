@@ -67,6 +67,7 @@ final class BookPreviewScene {
         camera.camera.fieldOfViewInDegrees = 30
         camera.position = SIMD3(0, 0, 0.62)
         root.addChild(camera)
+        ShelfScene.addLights(to: camera, lookingAt: 0.62)
         root.addChild(pivot)
         // A soft backdrop, so the view never shows an empty void.
         let backdrop = ModelEntity(

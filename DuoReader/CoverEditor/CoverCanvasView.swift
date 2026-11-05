@@ -65,7 +65,8 @@ struct CoverCanvasView: View {
                 let start = panStart ?? (model.design.imageOffsetX, model.design.imageOffsetY)
                 panStart = start
                 let bounds = CGRect(origin: .zero, size: canvas)
-                let filled = CoverRenderer.fillRect(imageSize: image.size, in: bounds, zoom: model.design.imageZoom, offsetX: 0, offsetY: 0)
+                let placed = model.design.fitsWholeImage == true ? CoverRenderer.fitRect : CoverRenderer.fillRect
+                let filled = placed(image.size, bounds, model.design.imageZoom, 0, 0)
                 let spareX = (filled.width - bounds.width) / 2
                 let spareY = (filled.height - bounds.height) / 2
                 if spareX > 0 {
