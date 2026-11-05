@@ -303,12 +303,17 @@ final class ReaderModel {
         _ = await navigator.go(to: link, options: NavigatorGoOptions(animated: false))
     }
 
-    /// Goes to a position, e.g. a search result, remembering where the reader was.
-    func go(to locator: Locator) async {
-        guard let navigator else { return }
+    /// Goes to a position, e.g. a search result, remembering where the reader
+    /// was. Returns false if the navigator couldn't go there.
+    @discardableResult
+    func go(to locator: Locator) async -> Bool {
+        guard let navigator else { return false }
         rememberReturnPoint(currentLocator)
         highlightSearchResult(nil)
-        _ = await navigator.go(to: locator, options: NavigatorGoOptions(animated: false))
+        if await navigator.go(to: locator, options: NavigatorGoOptions(animated: false)) { return true }
+        // If the exact spot won't resolve, at least open its chapter.
+        guard let link = publication?.linkWithHREF(locator.href) else { return false }
+        return await navigator.go(to: link, options: NavigatorGoOptions(animated: false))
     }
 
     /// Goes to a point through the whole book, from 0 to 1 (the scrubber).
@@ -318,8 +323,7 @@ final class ReaderModel {
         guard let publication, progression.isFinite else { return false }
         nonisolated(unsafe) let source = publication
         guard let locator = await source.locate(progression: min(max(progression, 0), 1)) else { return false }
-        await go(to: locator)
-        return true
+        return await go(to: locator)
     }
 
     /// Returns to where the reader was before the first of their recent jumps.

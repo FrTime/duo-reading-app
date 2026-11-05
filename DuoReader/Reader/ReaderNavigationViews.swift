@@ -188,53 +188,79 @@ private struct SearchResultRow: View {
 }
 
 /// A slider through the whole book. Moving it previews the percentage;
-/// letting go jumps there.
+/// letting go, or pausing, jumps there.
 struct ReaderScrubber: View {
     let model: ReaderModel
     @State private var draft: Double?
+    @State private var pendingJump: Task<Void, Never>?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// VoiceOver swipes up or down move this far through the book.
     static let accessibilityStep = 0.05
+    /// A pause this long while dragging jumps too, so the jump doesn't hang
+    /// on the slider reporting the end of the drag.
+    static let settleDelay: Duration = .milliseconds(450)
 
     var body: some View {
         let value = draft ?? model.progression ?? 0
-        VStack(spacing: 2) {
-            Slider(value: Binding(get: { value }, set: { draft = $0 }), in: 0 ... 1) { editing in
-                if !editing, let target = draft {
-                    Task {
-                        // Keep showing the target until the page arrives
-                        // (see onChange below), unless there's nowhere to go.
-                        if !(await model.go(toProgression: target)) { draft = nil }
+        HStack(spacing: 12) {
+            VStack(spacing: 2) {
+                Slider(value: Binding(get: { value }, set: { setDraft($0) }), in: 0 ... 1) { editing in
+                    if !editing { jumpToDraft() }
+                }
+                .accessibilityLabel("Position in Book")
+                .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
+                .accessibilityAdjustableAction { direction in
+                    let step = direction == .increment ? Self.accessibilityStep : -Self.accessibilityStep
+                    let target = min(max((model.progression ?? 0) + step, 0), 1)
+                    Task { await model.go(toProgression: target) }
+                }
+
+                if !dynamicTypeSize.isAccessibilitySize {
+                    // Both stacked, one hidden, so the bar keeps its height
+                    // while dragging. (At the largest text sizes the slider
+                    // shows alone; the bar can't grow.)
+                    ZStack {
+                        ReaderProgressLabel(
+                            progression: model.progression,
+                            chapterTitle: model.chapterTitle,
+                            position: model.position,
+                            positionCount: model.positionCount
+                        )
+                        .opacity(draft == nil ? 1 : 0)
+                        Text((draft ?? 0).formatted(.percent.precision(.fractionLength(0))))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .opacity(draft == nil ? 0 : 1)
                     }
                 }
             }
-            .accessibilityLabel("Position in Book")
-            .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
-            .accessibilityAdjustableAction { direction in
-                let step = direction == .increment ? Self.accessibilityStep : -Self.accessibilityStep
-                let target = min(max((model.progression ?? 0) + step, 0), 1)
-                Task { await model.go(toProgression: target) }
-            }
-            .onChange(of: model.progression) { draft = nil }
+            .frame(maxWidth: 520)
 
-            if dynamicTypeSize.isAccessibilitySize {
-                // The bar can't grow, so at the largest sizes the slider shows alone.
-                EmptyView()
-            } else if let draft {
-                Text(draft.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            } else {
-                ReaderProgressLabel(
-                    progression: model.progression,
-                    chapterTitle: model.chapterTitle,
-                    position: model.position,
-                    positionCount: model.positionCount
-                )
-            }
+            ReturnToPlaceButton(model: model)
         }
-        .frame(maxWidth: 520)
+        .onChange(of: model.progression) { draft = nil }
+    }
+
+    private func setDraft(_ value: Double) {
+        draft = value
+        pendingJump?.cancel()
+        pendingJump = Task {
+            try? await Task.sleep(for: Self.settleDelay)
+            guard !Task.isCancelled else { return }
+            jumpToDraft()
+        }
+    }
+
+    private func jumpToDraft() {
+        pendingJump?.cancel()
+        pendingJump = nil
+        guard let target = draft else { return }
+        Task {
+            // Keep showing the target until the page arrives (the onChange
+            // above clears it), unless the jump went nowhere.
+            if !(await model.go(toProgression: target)) { draft = nil }
+        }
     }
 }
 

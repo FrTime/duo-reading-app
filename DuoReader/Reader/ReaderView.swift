@@ -26,13 +26,6 @@ struct ReaderView: View {
     var body: some View {
         NavigationStack {
             content
-                // Bottom trailing, so it stays off the hinge on an open Duo.
-                .overlay(alignment: .bottomTrailing) {
-                    if model.isChromeVisible, model.state == .ready {
-                        ReturnToPlaceButton(model: model)
-                            .padding([.bottom, .trailing], 12)
-                    }
-                }
                 // The scrubber is a bar of its own, not a toolbar item: on the
                 // Duo the system can fold toolbars into the side rail, where
                 // a slider gets squeezed and its drag lost.
@@ -385,6 +378,7 @@ struct ReaderSidePanel: View {
             .labelStyle(.iconOnly)
             .font(.title2)
             .buttonStyle(.borderless)
+            ReturnToPlaceButton(model: model)
             Spacer(minLength: 0)
         }
         .padding()
