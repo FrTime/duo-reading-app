@@ -36,8 +36,7 @@ final class ReaderModel {
     var settings: ReaderSettings {
         didSet {
             guard settings != oldValue else { return }
-            settingsStore.save(settings)
-            applySettings()
+            scheduleSettingsUpdate()
         }
     }
 
@@ -56,7 +55,8 @@ final class ReaderModel {
 
     /// Whether the book reflows (EPUB). PDFs have fixed pages.
     var isReflowable: Bool {
-        navigator is EPUBNavigatorViewController
+        guard let publication else { return true }
+        return publication.metadata.layout != .fixed && !publication.conforms(to: .pdf)
     }
 
     /// How far through the book the current page is, from 0 to 1.
@@ -74,6 +74,7 @@ final class ReaderModel {
     @ObservationIgnored private lazy var saveThrottle = SaveThrottle { [weak self] in self?.save() }
     @ObservationIgnored private var delegateBridge: NavigatorDelegateBridge?
     @ObservationIgnored private var isClosed = false
+    @ObservationIgnored private var settingsUpdate: Task<Void, Never>?
 
     init(
         book: Book,
@@ -153,6 +154,7 @@ final class ReaderModel {
     func close() {
         guard !isClosed else { return }
         isClosed = true
+        if settingsUpdate != nil { commitSettings() }
         saveThrottle.flush()
         navigator = nil
         publication = nil
@@ -161,17 +163,42 @@ final class ReaderModel {
 
     /// Saves now, e.g. when the app moves to the background.
     func flush() {
+        if settingsUpdate != nil { commitSettings() }
         saveThrottle.flush()
     }
 
     // MARK: - Settings
 
     private var epubPreferences: EPUBPreferences {
-        ReadiumPreferences.epub(settings, systemIsDark: systemIsDark, columns: settings.spread.columnCount)
+        ReadiumPreferences.epub(
+            settings,
+            systemIsDark: systemIsDark,
+            columns: settings.spread.columnCount,
+            spread: settings.spread.pdfSpread
+        )
     }
 
     private var pdfPreferences: PDFPreferences {
         ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: settings.spread.pdfSpread)
+    }
+
+    /// Saves and applies settings shortly after the last change, so dragging
+    /// a slider doesn't re-paginate the book on every tick.
+    private func scheduleSettingsUpdate() {
+        settingsUpdate?.cancel()
+        settingsUpdate = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self else { return }
+            self.commitSettings()
+        }
+    }
+
+    /// Saves and applies any settings change still waiting.
+    func commitSettings() {
+        settingsUpdate?.cancel()
+        settingsUpdate = nil
+        settingsStore.save(settings)
+        applySettings()
     }
 
     /// Pushes the current settings to the navigator.

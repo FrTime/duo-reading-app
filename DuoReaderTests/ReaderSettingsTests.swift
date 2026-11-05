@@ -135,6 +135,23 @@ struct ReaderSettingsTests {
         for _ in 0 ..< 3 { value = (value + 0.1).roundedToStep(0.1) }
         #expect(value == 1.3)
     }
+
+    @Test(arguments: [0.05, 0.1, 0.25, 0.5])
+    func everyStepIsExact(step: Double) {
+        let perUnit = (1 / step).rounded()
+        for n in 0 ... Int(3 * perUnit) {
+            let expected = Double(n) / perUnit
+            #expect((expected + step / 3).roundedToStep(step) == expected)
+        }
+    }
+
+    @Test func spreadMapsToReadium() {
+        #expect(ReaderSpread.automatic.columnCount == .auto)
+        #expect(ReaderSpread.single.columnCount == .one)
+        #expect(ReaderSpread.double.columnCount == .two)
+        #expect(ReaderSpread.single.pdfSpread == .never)
+        #expect(ReaderSpread.double.pdfSpread == .always)
+    }
 }
 
 struct ReadiumPreferencesTests {

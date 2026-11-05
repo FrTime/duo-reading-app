@@ -59,7 +59,9 @@ struct ReaderSettingsView: View {
                     }
                 }
             }
-            Toggle("Invert Images on Dark Pages", isOn: $settings.invertsImagesInDarkThemes)
+            if isReflowable {
+                Toggle("Invert Images on Dark Pages", isOn: $settings.invertsImagesInDarkThemes)
+            }
         }
     }
 
@@ -71,7 +73,8 @@ struct ReaderSettingsView: View {
         if palette.text.contrastRatio(with: palette.background) < 4.5 {
             Label("These colours may be hard to read. Try more contrast.", systemImage: "exclamationmark.triangle")
                 .font(.footnote)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
+                .symbolRenderingMode(.multicolor)
         }
     }
 
@@ -182,6 +185,7 @@ struct ReaderSettingsView: View {
 private struct ThemePicker: View {
     @Binding var selection: ReaderTheme
     let settings: ReaderSettings
+    @ScaledMetric(relativeTo: .title3) private var swatchSize = 52.0
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -195,7 +199,7 @@ private struct ThemePicker: View {
                             Text("Aa")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(Color(uiColor: palette.text.uiColor))
-                                .frame(width: 52, height: 52)
+                                .frame(width: swatchSize, height: swatchSize)
                                 .background(Color(uiColor: palette.background.uiColor), in: .circle)
                                 .overlay {
                                     Circle().strokeBorder(selection == theme ? Color.accentColor : Color.secondary.opacity(0.4),
@@ -233,6 +237,8 @@ struct LabeledSlider<F: FormatStyle>: View where F.FormatInput == Double, F.Form
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+            // The slider below speaks the title and value itself.
+            .accessibilityHidden(true)
             Slider(value: $value, in: range, step: step)
                 .accessibilityLabel(Text(title))
                 .accessibilityValue(Text(value.formatted(format)))
@@ -296,6 +302,12 @@ extension Double {
     /// (0.1 + 0.1 + 0.1 ≠ 0.3 in floating point).
     func roundedToStep(_ step: Double) -> Double {
         guard step > 0 else { return self }
+        // Dividing by a whole number of steps per unit keeps decimal steps
+        // exact: 12 / 10 is 1.2, where 12 * 0.1 is 1.2000000000000002.
+        let perUnit = (1 / step).rounded()
+        if perUnit > 0, abs(perUnit * step - 1) < 1e-9 {
+            return (self * perUnit).rounded() / perUnit
+        }
         return (self / step).rounded() * step
     }
 }

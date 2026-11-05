@@ -12,11 +12,13 @@ enum ReadiumPreferences {
     ///   - settings: The user's settings.
     ///   - systemIsDark: Whether the system is in Dark Mode.
     ///   - columns: How many pages to show side by side, decided by the layout.
+    ///   - spread: Side-by-side pages for fixed-layout EPUBs, which ignore `columns`.
     ///   - extraMargin: Added to the margin factor, e.g. to keep text out of the fold.
     static func epub(
         _ settings: ReaderSettings,
         systemIsDark: Bool,
         columns: ColumnCount = .one,
+        spread: Spread? = nil,
         extraMargin: Double = 0
     ) -> EPUBPreferences {
         let theme = settings.effectiveTheme(systemIsDark: systemIsDark)
@@ -38,6 +40,7 @@ enum ReadiumPreferences {
             paragraphSpacing: custom ? settings.paragraphSpacing : nil,
             publisherStyles: settings.usesPublisherStyles,
             scroll: settings.flow == .scroll,
+            spread: spread,
             textAlign: custom ? settings.alignment.readium : nil,
             textColor: ReadiumNavigator.Color(palette.text),
             theme: readiumTheme(for: theme, palette: palette),

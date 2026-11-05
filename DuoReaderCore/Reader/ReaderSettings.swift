@@ -62,9 +62,10 @@ public struct ReaderSettings: Codable, Equatable, Sendable {
 
     public static let fontScaleRange = 0.6 ... 3.0
     public static let fontWeightRange = 0.6 ... 2.0
-    public static let lineHeightRange = 1.0 ... 2.4
-    public static let paragraphSpacingRange = 0.0 ... 3.0
-    public static let paragraphIndentRange = 0.0 ... 4.0
+    // Line height and paragraph ranges match Readium's own editor ranges.
+    public static let lineHeightRange = 1.0 ... 2.0
+    public static let paragraphSpacingRange = 0.0 ... 2.0
+    public static let paragraphIndentRange = 0.0 ... 3.0
     public static let wordSpacingRange = 0.0 ... 1.0
     public static let letterSpacingRange = 0.0 ... 0.5
     public static let marginsRange = 0.0 ... 4.0
