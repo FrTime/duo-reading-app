@@ -193,6 +193,12 @@ struct WidgetShelfLayout: Equatable, Sendable {
     /// Room kept at the end of the last row for the "+N" badge.
     static let overflowBadgeWidth = 34.0
 
+    /// Spines keep room for the badge beside them. Covers are wide enough to
+    /// carry it on the last cover, so reserving room would cost a whole book.
+    static func reservedBadgeWidth(for style: WidgetSnapshot.ShelfStyle) -> Double {
+        style == .covers ? 0 : overflowBadgeWidth
+    }
+
     init(rows: [[Placed]], overflow: Int) {
         self.rows = rows
         self.overflow = overflow
@@ -203,10 +209,10 @@ struct WidgetShelfLayout: Equatable, Sendable {
         let total = max(totalCount, books.count)
         var rows = Self.fit(books, style: style, rowCount: rowCount, rowWidth: rowWidth,
                             lastRowWidth: rowWidth, bookHeight: bookHeight)
-        if rows.joined().count < total {
+        if rows.joined().count < total, Self.reservedBadgeWidth(for: style) > 0 {
             // Make room for the badge and fit again.
             rows = Self.fit(books, style: style, rowCount: rowCount, rowWidth: rowWidth,
-                            lastRowWidth: rowWidth - Self.overflowBadgeWidth, bookHeight: bookHeight)
+                            lastRowWidth: rowWidth - Self.reservedBadgeWidth(for: style), bookHeight: bookHeight)
         }
         self.init(rows: rows, overflow: total - rows.joined().count)
     }

@@ -78,22 +78,36 @@ private struct ShelfRow: View {
                 ForEach(books) { placed in
                     Link(destination: WidgetLink.url(forBook: placed.book.id)) {
                         book(placed)
+                            .overlay(alignment: .bottomTrailing) {
+                                if style == .covers, overflow > 0, placed.id == books.last?.id {
+                                    badge
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(.black.opacity(0.6), in: Capsule())
+                                        .padding(4)
+                                }
+                            }
                     }
                     .accessibilityLabel(placed.book.accessibilityDescription)
                 }
                 Spacer(minLength: 0)
-                if overflow > 0 {
-                    Text("+\(overflow)")
-                        .font(.caption2.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.85))
+                if style == .spines, overflow > 0 {
+                    badge
                         .frame(width: WidgetShelfLayout.overflowBadgeWidth - 4)
                         .padding(.bottom, 4)
-                        .accessibilityLabel("\(overflow) more books")
                 }
             }
             .frame(height: bookHeight * WidgetShelfLayout.maxScale, alignment: .bottom)
             Board()
         }
+    }
+
+    /// "+N" for the books that didn't fit.
+    private var badge: some View {
+        Text("+\(overflow)")
+            .font(.caption2.weight(.semibold).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.85))
+            .accessibilityLabel("\(overflow) more books")
     }
 
     @ViewBuilder

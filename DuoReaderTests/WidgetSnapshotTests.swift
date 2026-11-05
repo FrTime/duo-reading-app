@@ -117,6 +117,16 @@ struct WidgetSnapshotTests {
         #expect(layout.overflow == 10 - layout.rows[0].count)
     }
 
+    @Test func coversDontGiveUpABookForTheBadge() {
+        let books = (0..<10).map { _ in book() }
+        // Covers are 60 wide at height 90: four fit in 250 with room to spare,
+        // but not with 34 more kept for the badge.
+        let layout = WidgetShelfLayout(books: books, totalCount: 10, style: .covers,
+                                       rowCount: 1, rowWidth: 250, bookHeight: 90)
+        #expect(layout.rows[0].count == 4)
+        #expect(layout.overflow == 6)
+    }
+
     @Test func noBadgeWhenEverythingFits() {
         let books = (0..<3).map { _ in book(thickness: 0.25) }
         let layout = WidgetShelfLayout(books: books, totalCount: 3, style: .spines,
