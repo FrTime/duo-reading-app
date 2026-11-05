@@ -61,6 +61,19 @@ public enum LibraryQuery {
         }
     }
 
+    /// Puts the shelf itself in `sort` order by renumbering `shelfOrder`, so
+    /// the 3D shelf (which always shows the user's own arrangement) and
+    /// "My Order" follow. Returns whether any book moved.
+    @discardableResult
+    public static func arrangeShelf(_ books: [Book], by sort: LibrarySort) -> Bool {
+        var moved = false
+        for (position, book) in self.sort(books, by: sort).enumerated() where book.shelfOrder != position {
+            book.shelfOrder = position
+            moved = true
+        }
+        return moved
+    }
+
     /// "The Hobbit" sorts under H, as in a bookshop.
     static func sortKey(forTitle title: String) -> String {
         for article in ["the ", "a ", "an "] where title.lowercased().hasPrefix(article) && title.count > article.count {

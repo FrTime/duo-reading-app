@@ -65,6 +65,14 @@ struct LibraryQueryTests {
         let books = [book("Old", added: t), book("New", added: t.addingTimeInterval(5))]
         #expect(LibraryQuery.sort(books, by: .recentlyAdded).map(\.title) == ["New", "Old"])
     }
+
+    @Test func arrangingTheShelfRenumbersItsOrder() {
+        let books = [book("Vol. 10", order: 0), book("Vol. 2", order: 1), book("Vol. 1", order: 2)]
+        #expect(LibraryQuery.arrangeShelf(books, by: .title))
+        #expect(LibraryQuery.sort(books, by: .shelf).map(\.title) == ["Vol. 1", "Vol. 2", "Vol. 10"])
+        #expect(books.map(\.shelfOrder).sorted() == [0, 1, 2])
+        #expect(!LibraryQuery.arrangeShelf(books, by: .title))
+    }
 }
 
 @MainActor
