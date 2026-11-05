@@ -21,6 +21,25 @@ struct PageScaleTests {
         )
     }
 
+    @Test func stretchZoomCoversTheViewWhenTheDocumentEndsShort() {
+        // The open Duo: Readium's document stops a third of a point short.
+        let zoom = PageScalePlan.stretchZoom(
+            current: 0.446,
+            contentSize: CGSize(width: 950.6667, height: 669),
+            viewSize: CGSize(width: 951, height: 669)
+        )
+        #expect(zoom > 0.446)
+        #expect(950.6667 * zoom / 0.446 >= 951)
+    }
+
+    @Test func stretchZoomNeverZoomsOut() {
+        let zoom = PageScalePlan.stretchZoom(
+            current: 0.5, contentSize: CGSize(width: 960, height: 700), viewSize: CGSize(width: 951, height: 669)
+        )
+        #expect(zoom == 0.5)
+        #expect(PageScalePlan.stretchZoom(current: 0.5, contentSize: .zero, viewSize: CGSize(width: 951, height: 669)) == 0.5)
+    }
+
     @Test func fitPageAndStretchLeaveTheEngineAlone() {
         #expect(plan(.fitPage) == PageScalePlan(zoom: fitZoom, offset: .zero))
         #expect(plan(.stretch) == PageScalePlan(zoom: fitZoom, offset: .zero))

@@ -95,17 +95,23 @@ final class ComicPageScaler {
             screenScale: webView.window?.screen.scale ?? webView.traitCollection.displayScale,
             rightToLeft: rightToLeft
         )
+        let zoom = scale == .stretch
+            ? PageScalePlan.stretchZoom(current: scrollView.zoomScale, contentSize: scrollView.contentSize, viewSize: size)
+            : plan.zoom
         let key = AppliedScale(scale: scale, size: size, fitZoom: fitZoom, content: content.integral)
         if applied.object(forKey: webView) == key {
             // Already done; leave any pinch or pan alone. But if WebKit has
             // dropped back to the fit zoom on its own, as it can when Readium
-            // rewrites the page's viewport, zoom again.
-            let wasReset = abs(scrollView.zoomScale - fitZoom) < 0.001 && plan.zoom > fitZoom + 0.001
+            // rewrites the page's viewport, zoom again. Stretch's zoom is too
+            // small a step above the fit zoom to tell that way.
+            let wasReset = scale == .stretch
+                ? scrollView.zoomScale < zoom - 0.00001
+                : abs(scrollView.zoomScale - fitZoom) < 0.001 && plan.zoom > fitZoom + 0.001
             guard wasReset, !scrollView.isTracking, !scrollView.isZooming else { return }
         }
         applied.setObject(key, forKey: webView)
 
-        scrollView.setZoomScale(plan.zoom, animated: false)
+        scrollView.setZoomScale(zoom, animated: false)
         scrollView.setContentOffset(plan.offset, animated: false)
     }
 

@@ -118,6 +118,23 @@ public struct PageScalePlan: Equatable, Sendable {
         y = min(max(y, 0), maxY)
         return PageScalePlan(zoom: zoom, offset: CGPoint(x: x, y: y))
     }
+
+    /// The zoom at which a stretched page's document covers the whole view.
+    ///
+    /// Readium rounds the document's size down to whole CSS pixels, so at the
+    /// fit zoom it can end a fraction of a point short of the view's edge,
+    /// which shows as a thin blank line. So this goes a point past the edge.
+    /// Never zooms out.
+    ///
+    /// - Parameters:
+    ///   - current: The scroll view's zoom now.
+    ///   - contentSize: The scroll view's content size at that zoom.
+    ///   - viewSize: The web view's size.
+    public static func stretchZoom(current: CGFloat, contentSize: CGSize, viewSize: CGSize) -> CGFloat {
+        guard contentSize.width > 0, contentSize.height > 0 else { return current }
+        let bleed: CGFloat = 1
+        return current * max(1, (viewSize.width + bleed) / contentSize.width, (viewSize.height + bleed) / contentSize.height)
+    }
 }
 
 // MARK: - Storage
