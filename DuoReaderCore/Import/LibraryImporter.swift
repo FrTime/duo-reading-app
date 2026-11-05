@@ -46,11 +46,15 @@ public actor LibraryImporter {
     }
 
     /// Imports each file in order and reports what happened to each.
-    public func importFiles(_ urls: [URL]) -> [ImportOutcome] {
-        urls.map(importFile)
+    public func importFiles(_ urls: [URL]) async -> [ImportOutcome] {
+        var outcomes: [ImportOutcome] = []
+        for url in urls {
+            outcomes.append(await importFile(url))
+        }
+        return outcomes
     }
 
-    public func importFile(_ url: URL) -> ImportOutcome {
+    public func importFile(_ url: URL) async -> ImportOutcome {
         let fileName = url.lastPathComponent
         let accessing = url.startAccessingSecurityScopedResource()
         defer {
@@ -78,7 +82,7 @@ public actor LibraryImporter {
 
         let metadata: BookMetadata
         do {
-            metadata = try reader.readMetadata(from: url)
+            metadata = try await reader.readMetadata(from: url)
         } catch MetadataError.drmProtected {
             return .failed(fileName: fileName, reason: .drmProtected)
         } catch {

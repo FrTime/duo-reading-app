@@ -39,6 +39,10 @@ extension DuoReaderSchemaV1 {
         public var lastOpened: Date?
         /// Reading progress from 0 to 1.
         public var progress: Double
+        /// Where the reader left off, as a Readium `Locator` in JSON. Nil until
+        /// the book is first opened. Stored as JSON so the model stays free of
+        /// reader types.
+        public var readingLocator: String?
         /// Position on the shelf. Lower comes first.
         public var shelfOrder: Int
 
