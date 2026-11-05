@@ -1,0 +1,38 @@
+import Foundation
+import SwiftData
+import Testing
+@testable import DuoReader
+
+@MainActor
+struct LibraryStoreTests {
+    @Test func savesAndFetchesABook() throws {
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let book = Book(
+            relativeFilePath: "Books/abc.epub",
+            contentHash: "abc",
+            format: .epub,
+            title: "A Study in Scarlet",
+            authors: ["Arthur Conan Doyle"]
+        )
+        context.insert(book)
+        try context.save()
+
+        let fetched = try context.fetch(FetchDescriptor<Book>())
+        #expect(fetched.count == 1)
+        #expect(fetched.first?.title == "A Study in Scarlet")
+        #expect(fetched.first?.format == .epub)
+        #expect(fetched.first?.progress == 0)
+    }
+
+    @Test func unknownFormatFallsBackToEpub() throws {
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .pdf, title: "X")
+        book.formatRawValue = "something-new"
+        #expect(book.format == .epub)
+    }
+
+    @Test func displayAuthorsHandlesNone() {
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .pdf, title: "X")
+        #expect(!book.displayAuthors.isEmpty)
+    }
+}

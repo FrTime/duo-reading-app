@@ -1,0 +1,12 @@
+# Xcode
+build/
+DerivedData/
+*.xcresult
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+.swiftpm/
+# macOS
+.DS_Store
+# Local test books (never commit copyrighted files)
+TestBooks/

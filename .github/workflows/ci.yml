@@ -1,0 +1,85 @@
+name: CI
+
+# Manual only for now: PRs are built and tested on Tim's Mac with Xcode 27.1
+# (see AGENTS.md). Add `pull_request` back once Actions billing is sorted and
+# the hosted runners have Xcode 27.1.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (iOS Simulator)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          # The app targets iOS 27.1, so Xcode 27.1 or later is required.
+          # Fail clearly if the runner image doesn't have it yet.
+          xcode="$(ls -d /Applications/Xcode_[0-9]*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          v="$(xcodebuild -version | awk 'NR==1 {print $2}')"
+          if [ "$(printf '%s\n' 27.1 "$v" | sort -V | head -1)" != "27.1" ]; then
+            echo "::error::Xcode $v is too old; 27.1 or later is needed for the iPhone Duo SDK"
+            exit 1
+          fi
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j \
+            | python3 -c 'import json,sys
+          d=json.load(sys.stdin)["devices"]
+          ios=sorted((k for k in d if "iOS" in k), key=lambda k:[int(x) for x in k.split("iOS-")[1].split("-")])
+          for rt in reversed(ios):
+              devs=d[rt]
+              # Prefer the iPhone Duo simulator, fall back to any iPhone.
+              for dev in sorted(devs, key=lambda x: "Duo" not in x["name"]):
+                  if dev["name"].startswith("iPhone"):
+                      print(dev["udid"]); sys.exit()')
+          echo "Using simulator $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project DuoReader.xcodeproj \
+            -scheme DuoReader \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee xcodebuild.log \
+            | grep -v "CoreData:" \
+            | grep -E "error:|Test run with|✘|Test Case .* failed|\*\* (BUILD|TEST)"
+
+      # Swift Testing results don't show up in xcodebuild's XCTest count, so
+      # read the result bundle and fail if nothing ran.
+      - name: Check that tests ran
+        run: |
+          xcrun xcresulttool get test-results summary --path TestResults.xcresult --compact > summary.json
+          python3 - <<'PY'
+          import json
+          s = json.load(open("summary.json"))
+          total, passed, failed = s["totalTestCount"], s["passedTests"], s["failedTests"]
+          print(f"{total} tests: {passed} passed, {failed} failed, result {s['result']}")
+          if total == 0:
+              raise SystemExit("No tests ran")
+          PY
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            TestResults.xcresult
+            xcodebuild.log
+          if-no-files-found: ignore
