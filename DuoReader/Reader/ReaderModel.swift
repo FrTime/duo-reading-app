@@ -29,6 +29,10 @@ final class ReaderModel {
     /// Whether the top and bottom bars are showing.
     var isChromeVisible = true
 
+    /// Width for docked settings, from the spine to the right edge. Nil
+    /// lets the inspector choose. Set by the view.
+    var settingsColumnWidth: CGFloat?
+
     /// A web or mail link the reader tapped, waiting for confirmation.
     var pendingExternalURL: URL?
 

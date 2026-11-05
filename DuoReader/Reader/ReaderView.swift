@@ -82,7 +82,10 @@ struct ReaderView: View {
                 isReflowable: model.isReflowable,
                 outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs)
             )
-                .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                // On the open Duo, settings take exactly the right-hand
+                // screen, so they meet the crease instead of covering a
+                // sliver of the right page.
+                .inspectorColumnWidth(min: 320, ideal: model.settingsColumnWidth ?? 360, max: max(420, model.settingsColumnWidth ?? 0))
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -153,13 +156,20 @@ struct ReaderView: View {
     }
 
     private var chromeVisibility: Visibility {
-        model.isChromeVisible || model.state != .ready ? .visible : .hidden
+        barsShown || model.state != .ready ? .visible : .hidden
+    }
+
+    /// The bars hide while settings are open: on the open Duo their buttons
+    /// sit in the side rail, where they'd read as part of the settings panel,
+    /// and settings have their own Done button.
+    private var barsShown: Bool {
+        model.isChromeVisible && !showingSettings
     }
 
     /// The scrubber shows with the bars, unless the pose gives the
     /// controls a panel of their own.
     private var showsScrubber: Bool {
-        model.isChromeVisible && model.state == .ready && model.layout?.controlsFrame == nil
+        barsShown && model.state == .ready && model.layout?.controlsFrame == nil
     }
 
     @ViewBuilder
@@ -184,7 +194,7 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            ReaderSurface(model: model) { showingSettings = true }
+            ReaderSurface(model: model, barsShown: barsShown, settingsShown: showingSettings) { showingSettings = true }
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -283,6 +293,8 @@ enum ReaderProgressText {
 /// fold's division region.
 private struct ReaderSurface: View {
     let model: ReaderModel
+    let barsShown: Bool
+    let settingsShown: Bool
     let showSettings: () -> Void
     /// The side space to keep clear, as the difference between the safe frame
     /// and the edge-to-edge frame. (A view that ignores the safe area reports
@@ -319,11 +331,24 @@ private struct ReaderSurface: View {
                     // Pages start below the title bar. Measured only while it
                     // shows, so hiding it doesn't reflow the page.
                     .onChange(of: safe.frame(in: .global).minY, initial: true) { _, barBottom in
-                        if model.isChromeVisible { model.titleBarBottom = barBottom }
+                        if barsShown { model.titleBarBottom = barBottom }
+                    }
+                    .onChange(of: settingsColumnWidth(in: full), initial: true) { _, width in
+                        // Not while settings show, in case they narrow the page.
+                        if !settingsShown { model.settingsColumnWidth = width }
                     }
             }
             .ignoresSafeArea(.container)
         }
+    }
+
+    /// Docked settings fill everything right of the spine (the fold, or the
+    /// middle of a flat screen) when the screen is wide enough for two
+    /// pages; otherwise the inspector keeps its own width.
+    private func settingsColumnWidth(in proxy: GeometryProxy) -> CGFloat? {
+        guard proxy.size.width >= ReaderLayout.automaticSpreadMinWidth else { return nil }
+        let spine = proxy.reservedRegions(kind: .division).first?.frame.midX ?? proxy.size.width / 2
+        return (proxy.size.width - spine).rounded()
     }
 
     static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {
