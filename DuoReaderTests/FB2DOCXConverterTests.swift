@@ -144,6 +144,23 @@ struct DOCXConverterTests {
         #expect(doc.title == "Body Title")
     }
 
+    @Test func textBoxesKeepTheSurroundingTextAndAreNotDoubled() async throws {
+        let body = """
+        <w:document xmlns:w="w" xmlns:mc="mc" xmlns:wps="wps" xmlns:v="v"><w:body>
+          <w:p><w:r><w:t xml:space="preserve">Before </w:t></w:r><w:r><mc:AlternateContent>
+            <mc:Choice><w:drawing><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></w:drawing></mc:Choice>
+            <mc:Fallback><w:pict><v:textbox><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></v:textbox></w:pict></mc:Fallback>
+          </mc:AlternateContent></w:r><w:r><w:t xml:space="preserve"> after.</w:t></w:r></w:p>
+        </w:body></w:document>
+        """
+        let parsed = DOCXConverter.blocks(fromDocument: Data(body.utf8), styleNames: [:])
+        #expect(parsed.blocks.count == 1)
+        guard case .paragraph(let inline)? = parsed.blocks.first else { Issue.record("\(parsed.blocks)"); return }
+        #expect(inline.contains("Before"))
+        #expect(inline.contains("after."))
+        #expect(inline.components(separatedBy: "Boxed").count == 2)
+    }
+
     @Test func notADocxIsUnreadable() async throws {
         let zip = try await ComicConverterTests.zip([("readme.txt", Data("x".utf8))], name: "fake.docx")
         await #expect(throws: ConversionError.unreadable) { _ = try await DOCXConverter().document(from: zip) }

@@ -97,6 +97,11 @@ public struct DOCXConverter: BookConverter {
         private var bold = false, italic = false, underline = false, strike = false
         private var inText = false
         private var inRunProperties = false
+        /// Text boxes nest whole paragraphs inside a run; only the outermost
+        /// paragraph starts and finishes one.
+        private var paragraphDepth = 0
+        /// Word writes text boxes twice; the `mc:Fallback` copy is skipped.
+        private var fallbackDepth = 0
 
         init(styleNames: [String: String]) { self.styleNames = styleNames }
 
@@ -107,12 +112,17 @@ public struct DOCXConverter: BookConverter {
 
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String] = [:]) {
+            if name == "mc:Fallback" { fallbackDepth += 1 }
+            guard fallbackDepth == 0 else { return }
             switch name {
             case "w:p":
-                styleName = ""
-                paragraphXHTML = ""
-                paragraphText = ""
-            case "w:pStyle":
+                paragraphDepth += 1
+                if paragraphDepth == 1 {
+                    styleName = ""
+                    paragraphXHTML = ""
+                    paragraphText = ""
+                }
+            case "w:pStyle" where paragraphDepth == 1:
                 let id = attributes["w:val"] ?? ""
                 styleName = styleNames[id] ?? id.lowercased()
             case "w:r":
@@ -134,15 +144,28 @@ public struct DOCXConverter: BookConverter {
         }
 
         func parser(_ parser: XMLParser, foundCharacters string: String) {
-            if inText { runText += string }
+            if inText, fallbackDepth == 0 { runText += string }
         }
 
         func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+            if name == "mc:Fallback" {
+                fallbackDepth -= 1
+                return
+            }
+            guard fallbackDepth == 0 else { return }
             switch name {
             case "w:t": inText = false
             case "w:rPr": inRunProperties = false
             case "w:r": flushRun()
-            case "w:p": finishParagraph()
+            case "w:p":
+                paragraphDepth -= 1
+                if paragraphDepth == 0 {
+                    finishParagraph()
+                } else {
+                    // A text box's paragraph inside this one: keep it as a line.
+                    paragraphXHTML += "<br/>"
+                    paragraphText += "\n"
+                }
             default: break
             }
         }
