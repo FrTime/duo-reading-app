@@ -53,6 +53,16 @@ final class ReaderModel {
         settings.colors(for: settings.effectiveTheme(systemIsDark: systemIsDark))
     }
 
+    /// Where the page goes for the current size and Duo pose. Set by the view.
+    var layout: ReaderLayout? {
+        didSet {
+            if layout != oldValue { applySettings() }
+        }
+    }
+
+    /// Readium's page gutter, fixed so the fold gap can be worked out from it.
+    static let pageGutter: CGFloat = 20
+
     /// Whether the book reflows (EPUB). PDFs have fixed pages.
     var isReflowable: Bool {
         guard let publication else { return true }
@@ -129,7 +139,10 @@ final class ReaderModel {
                 let epub = try EPUBNavigatorViewController(
                     publication: publication,
                     initialLocation: initialLocation,
-                    config: EPUBNavigatorViewController.Configuration(preferences: epubPreferences)
+                    config: EPUBNavigatorViewController.Configuration(
+                        preferences: epubPreferences,
+                        readiumCSSRSProperties: CSSRSProperties(pageGutter: CSSPxLength(Double(Self.pageGutter)))
+                    )
                 )
                 epub.delegate = bridge
                 navigator = epub
@@ -174,13 +187,14 @@ final class ReaderModel {
         ReadiumPreferences.epub(
             settings,
             systemIsDark: systemIsDark,
-            columns: settings.spread.columnCount,
-            spread: settings.spread.pdfSpread
+            columns: (layout?.columns ?? 1) == 2 ? .two : .one,
+            spread: (layout?.columns ?? 1) == 2 ? .always : .never,
+            extraMargin: layout?.extraMarginFactor(gutter: Self.pageGutter) ?? 0
         )
     }
 
     private var pdfPreferences: PDFPreferences {
-        ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: settings.spread.pdfSpread)
+        ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: (layout?.columns ?? 1) == 2 ? .always : .never)
     }
 
     /// Saves and applies settings shortly after the last change, so dragging
@@ -305,23 +319,5 @@ private final class NavigatorDelegateBridge: EPUBNavigatorDelegate, PDFNavigator
 
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
         RemoteContentBlocker.install(in: userContentController)
-    }
-}
-
-extension ReaderSpread {
-    var columnCount: ColumnCount {
-        switch self {
-        case .automatic: .auto
-        case .single: .one
-        case .double: .two
-        }
-    }
-
-    var pdfSpread: Spread {
-        switch self {
-        case .automatic: .auto
-        case .single: .never
-        case .double: .always
-        }
     }
 }

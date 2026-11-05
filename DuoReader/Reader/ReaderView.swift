@@ -12,6 +12,7 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showingSettings = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
@@ -24,17 +25,24 @@ struct ReaderView: View {
                 .navigationTitle(model.book.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-                .toolbarVisibility(chromeVisibility, for: .navigationBar, .bottomBar)
+                .toolbarVisibility(chromeVisibility, for: .navigationBar)
+                .toolbarVisibility(bottomBarVisibility, for: .bottomBar)
                 .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
+                // On a wide screen (an open Duo) settings dock at the side so
+                // the page stays visible and live instead of under a sheet.
+                .inspector(isPresented: settingsBinding(regularWidth: true)) {
+                    settingsView
+                        .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                }
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
-        .sheet(isPresented: $showingSettings) {
-            ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+        .sheet(isPresented: settingsBinding(regularWidth: false)) {
+            settingsView
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -80,6 +88,24 @@ struct ReaderView: View {
         model.isChromeVisible || model.state != .ready ? .visible : .hidden
     }
 
+    /// The bottom bar's progress moves into the side panel when the pose
+    /// gives the controls their own space.
+    private var bottomBarVisibility: Visibility {
+        model.layout?.controlsFrame != nil ? .hidden : chromeVisibility
+    }
+
+    private var settingsView: some View {
+        ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+    }
+
+    /// Settings show as an inspector at regular width and a sheet otherwise.
+    private func settingsBinding(regularWidth: Bool) -> Binding<Bool> {
+        Binding(
+            get: { showingSettings && (horizontalSizeClass == .regular) == regularWidth },
+            set: { showingSettings = $0 }
+        )
+    }
+
     @ViewBuilder
     private var content: some View {
         switch model.state {
@@ -97,7 +123,7 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            NavigatorHost(model: model, settings: model.settings)
+            ReaderSurface(model: model) { showingSettings = true }
                 // Readium insets the page for the top and bottom safe areas
                 // itself, but not the sides. On the Duo's outer screen the
                 // status bar is a column on the side, so keep the side insets.
@@ -179,5 +205,92 @@ enum ReaderProgressText {
         default:
             return ""
         }
+    }
+}
+
+/// Lays the page out for the current Duo pose, from the reader's size and the
+/// fold's division region.
+private struct ReaderSurface: View {
+    let model: ReaderModel
+    let showSettings: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let fold = proxy.reservedRegions(kind: .division).first?.frame
+            let layout = ReaderLayout.resolve(
+                size: proxy.size,
+                fold: fold,
+                spread: model.settings.spread,
+                flow: model.settings.flow
+            )
+            ZStack(alignment: .topLeading) {
+                NavigatorHost(model: model, settings: model.settings)
+                    .frame(width: layout.pageFrame.width, height: layout.pageFrame.height)
+                    .offset(x: layout.pageFrame.minX, y: layout.pageFrame.minY)
+
+                if let controls = layout.controlsFrame {
+                    ReaderSidePanel(model: model, pose: layout.pose, showSettings: showSettings)
+                        .frame(width: controls.width, height: controls.height)
+                        .offset(x: controls.minX, y: controls.minY)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            .animation(.easeInOut(duration: 0.25), value: layout)
+            .onChange(of: layout, initial: true) { _, new in
+                model.layout = new
+            }
+        }
+    }
+}
+
+/// Controls that get their own space instead of overlaying the page: on the
+/// lower half in tabletop pose, or beside a single page in book pose.
+struct ReaderSidePanel: View {
+    let model: ReaderModel
+    let pose: ReaderLayout.Pose
+    let showSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            ReaderProgressLabel(
+                progression: model.progression,
+                chapterTitle: model.chapterTitle,
+                position: model.position,
+                positionCount: model.positionCount
+            )
+            if let progression = model.progression {
+                ProgressView(value: min(max(progression, 0), 1))
+                    .frame(maxWidth: 360)
+                    .accessibilityHidden(true)
+            }
+            HStack(spacing: 32) {
+                Button {
+                    Task { await model.turn(.backward, animated: model.settings.pageTurn == .slide) }
+                } label: {
+                    Label("Previous Page", systemImage: "chevron.backward")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                Button(action: showSettings) {
+                    Label("Reading Settings", systemImage: "textformat.size")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                Button {
+                    Task { await model.turn(.forward, animated: model.settings.pageTurn == .slide) }
+                } label: {
+                    Label("Next Page", systemImage: "chevron.forward")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            }
+            .labelStyle(.iconOnly)
+            .font(.title2)
+            .buttonStyle(.borderless)
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
+        .background(Color(uiColor: model.palette.background.uiColor))
     }
 }
