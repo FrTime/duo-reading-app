@@ -30,7 +30,7 @@ struct LibraryStoreRecoveryTests {
         let books = root.appending(path: "Books")
         try FileManager.default.createDirectory(at: books, withIntermediateDirectories: true)
         let id = UUID()
-        let epub = try LibraryImporterTests.sampleEPUB(title: "Survivor")
+        let epub = try await LibraryImporterTests.sampleEPUB(title: "Survivor")
         try FileManager.default.copyItem(at: epub, to: books.appending(path: "\(id.uuidString).epub"))
         try Data("ignore me".utf8).write(to: books.appending(path: "notes.txt"))
 
@@ -69,7 +69,8 @@ struct LibraryStoreRecoveryTests {
             let id = UUID()
             ids.append(id)
             let dest = books.appending(path: "\(id.uuidString).epub")
-            try FileManager.default.copyItem(at: try LibraryImporterTests.sampleEPUB(title: title), to: dest)
+            let epub = try await LibraryImporterTests.sampleEPUB(title: title)
+            try FileManager.default.copyItem(at: epub, to: dest)
             try FileManager.default.setAttributes(
                 [.creationDate: Date(timeIntervalSince1970: 1_000_000 + Double(i) * 60)], ofItemAtPath: dest.path())
         }
