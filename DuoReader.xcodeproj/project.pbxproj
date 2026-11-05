@@ -289,6 +289,7 @@
 				DEVELOPMENT_TEAM = DR6HJ575YH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/DuoReader-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Duo Reader";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
@@ -319,6 +320,7 @@
 				DEVELOPMENT_TEAM = DR6HJ575YH;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/DuoReader-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Duo Reader";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
