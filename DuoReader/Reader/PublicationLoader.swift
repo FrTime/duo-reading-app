@@ -45,8 +45,10 @@ final class PublicationLoader {
     static let shared = PublicationLoader()
 
     private let httpClient: HTTPClient
-    private let assetRetriever: AssetRetriever
-    private let opener: PublicationOpener
+    // Readium's retriever and opener aren't Sendable, but they're immutable
+    // once built and Readium runs their async methods off the main actor.
+    nonisolated(unsafe) private let assetRetriever: AssetRetriever
+    nonisolated(unsafe) private let opener: PublicationOpener
 
     init() {
         httpClient = DefaultHTTPClient()

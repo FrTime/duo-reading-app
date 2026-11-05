@@ -133,7 +133,8 @@ struct PublicationLoaderTests {
     }
 
     @Test func opensAnEPUBWithItsReadingOrderAndContents() async throws {
-        let publication = try await PublicationLoader().open(try await Self.readableEPUB())
+        // Publication isn't Sendable; tableOfContents() runs off the main actor.
+        nonisolated(unsafe) let publication = try await PublicationLoader().open(try await Self.readableEPUB())
         defer { publication.close() }
         #expect(publication.metadata.title == "Readable")
         #expect(publication.readingOrder.count == 2)

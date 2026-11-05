@@ -162,18 +162,18 @@ struct EPUBMetadataReaderTests {
         let url = Fixtures.temporaryURL("bad.epub")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("not a zip".utf8).write(to: url)
-        #expect(throws: MetadataError.self) { try await reader.readMetadata(from: url) }
+        await #expect(throws: MetadataError.self) { try await reader.readMetadata(from: url) }
     }
 
     @Test func rejectsMissingPackage() async throws {
         let url = try await Fixtures.epub(["OEBPS/other.txt": Data("x".utf8)])
-        #expect(throws: MetadataError.malformed("Missing package document")) { try await reader.readMetadata(from: url) }
+        await #expect(throws: MetadataError.malformed("Missing package document")) { try await reader.readMetadata(from: url) }
     }
 
     @Test func rejectsOversizedPackageDocument() async throws {
         let huge = Data(repeating: 0x20, count: Int(EPUBMetadataReader.maxDocumentBytes) + 1)
         let url = try await Fixtures.epub(["OEBPS/content.opf": huge])
-        #expect(throws: MetadataError.malformed("Entry too large: OEBPS/content.opf")) {
+        await #expect(throws: MetadataError.malformed("Entry too large: OEBPS/content.opf")) {
             try await reader.readMetadata(from: url)
         }
     }
@@ -200,7 +200,7 @@ struct EPUBMetadataReaderTests {
         </encryption>
         """
         let url = try await Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data("<package/>".utf8)])
-        #expect(throws: MetadataError.drmProtected) { try await reader.readMetadata(from: url) }
+        await #expect(throws: MetadataError.drmProtected) { try await reader.readMetadata(from: url) }
     }
 
     @Test func allowsFontObfuscation() async throws {

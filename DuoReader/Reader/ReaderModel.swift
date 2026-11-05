@@ -98,7 +98,10 @@ final class ReaderModel {
         book.lastOpened = .now
         state = .ready
 
-        positionCount = try? await publication.positions().get().count
+        // Publication isn't Sendable; Readium computes positions off the main
+        // actor and the navigator only reads the publication meanwhile.
+        nonisolated(unsafe) let positionsSource = publication
+        positionCount = try? await positionsSource.positions().get().count
     }
 
     /// Saves the current position and releases the publication.
