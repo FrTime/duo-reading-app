@@ -1,9 +1,21 @@
 import Foundation
 import NaturalLanguage
 
-/// Turns a file the reader can't open directly into an `EPUBDocument`.
-public protocol BookConverter: Sendable {
+/// Turns a file the reader can't open directly into an EPUB file.
+public protocol FileConverter: Sendable {
+    func convert(_ source: URL, to destination: URL) async throws
+}
+
+/// A converter that builds the whole book in memory as an `EPUBDocument`,
+/// which suits text formats. Comics stream page by page instead.
+public protocol BookConverter: FileConverter {
     func document(from url: URL) async throws -> EPUBDocument
+}
+
+extension BookConverter {
+    public func convert(_ source: URL, to destination: URL) async throws {
+        try await EPUBWriter.write(document(from: source), to: destination)
+    }
 }
 
 public enum ConversionError: Error, Equatable {
@@ -21,12 +33,15 @@ public enum BookConverters {
     public static let maxHTMLBytes = 20 * 1024 * 1024
 
     /// The converter for a format, or nil when it's read natively or not supported yet.
-    public static func converter(for format: BookFormat) -> (any BookConverter)? {
+    public static func converter(for format: BookFormat) -> (any FileConverter)? {
         switch format {
+        case .cbz: ComicConverter()
         case .txt: PlainTextConverter()
         case .markdown: MarkdownConverter()
         case .rtf: RTFConverter()
         case .html: HTMLConverter()
+        case .fb2: FB2Converter()
+        case .docx: DOCXConverter()
         default: nil
         }
     }

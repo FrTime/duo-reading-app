@@ -145,12 +145,11 @@ struct ReaderSettingsTests {
         }
     }
 
-    @Test func spreadMapsToReadium() {
-        #expect(ReaderSpread.automatic.columnCount == .auto)
-        #expect(ReaderSpread.single.columnCount == .one)
-        #expect(ReaderSpread.double.columnCount == .two)
-        #expect(ReaderSpread.single.pdfSpread == .never)
-        #expect(ReaderSpread.double.pdfSpread == .always)
+    @Test func layoutPagesMapToReadium() {
+        #expect(ReadiumPreferences.columnCount(pages: 1) == .one)
+        #expect(ReadiumPreferences.columnCount(pages: 2) == .two)
+        #expect(ReadiumPreferences.spread(pages: 1) == .never)
+        #expect(ReadiumPreferences.spread(pages: 2) == .always)
     }
 }
 

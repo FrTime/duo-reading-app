@@ -13,6 +13,9 @@ struct ReaderView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingSettings = false
+    @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
+    @State private var hinge: OuterCoverPolicy.Hinge = .none
+    @State private var outerCoverCamera = OuterCoverCamera.shared
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -24,20 +27,32 @@ struct ReaderView: View {
                 .navigationTitle(model.book.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
-                .toolbarVisibility(chromeVisibility, for: .navigationBar, .bottomBar)
+                .toolbarVisibility(chromeVisibility, for: .navigationBar)
+                .toolbarVisibility(bottomBarVisibility, for: .bottomBar)
                 .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
         }
-        .statusBarHidden(!model.isChromeVisible)
-        .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
-        .sheet(isPresented: $showingSettings) {
-            ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+        // On a wide screen (an open Duo) settings dock at the side so the page
+        // stays visible and live; at compact width the inspector shows as a
+        // sheet. One presenter, so folding or unfolding with settings open
+        // doesn't close them. It sits outside the reader's navigation stack:
+        // inside it, the settings' own title and Done button took over the
+        // reader's bar.
+        .inspector(isPresented: $showingSettings) {
+            ReaderSettingsView(
+                settings: $model.settings,
+                isReflowable: model.isReflowable,
+                outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs)
+            )
+                .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
+        .statusBarHidden(!model.isChromeVisible)
+        .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
         .task {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
@@ -47,8 +62,17 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.flush() }
+            if phase == .active { outerCoverCamera.refreshAccess() }
         }
-        .onDisappear { model.close() }
+        .onDisappear {
+            model.close()
+            outerCoverCamera.setRunning(false)
+        }
+        .modifier(OuterCoverCameraControl(
+            hinge: $hinge,
+            camera: outerCoverCamera,
+            shouldRunCamera: OuterCoverPolicy.shouldRunCamera(outerCoverInputs)
+        ))
         .confirmationDialog(
             "Open This Link?",
             isPresented: Binding(
@@ -68,6 +92,16 @@ struct ReaderView: View {
         }
     }
 
+    private var outerCoverInputs: OuterCoverPolicy.Inputs {
+        OuterCoverPolicy.Inputs(
+            isEnabled: showsCoverOnOutside,
+            cameraAccess: outerCoverCamera.access,
+            hinge: hinge,
+            isActive: scenePhase == .active,
+            isReaderReady: model.state == .ready
+        )
+    }
+
     private var pageColor: Color {
         Color(uiColor: model.palette.background.uiColor)
     }
@@ -78,6 +112,12 @@ struct ReaderView: View {
 
     private var chromeVisibility: Visibility {
         model.isChromeVisible || model.state != .ready ? .visible : .hidden
+    }
+
+    /// The bottom bar's progress moves into the side panel when the pose
+    /// gives the controls their own space.
+    private var bottomBarVisibility: Visibility {
+        model.layout?.controlsFrame != nil ? .hidden : chromeVisibility
     }
 
     @ViewBuilder
@@ -97,11 +137,7 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            NavigatorHost(model: model, settings: model.settings)
-                // Readium insets the page for the top and bottom safe areas
-                // itself, but not the sides. On the Duo's outer screen the
-                // status bar is a column on the side, so keep the side insets.
-                .ignoresSafeArea(.container, edges: .vertical)
+            ReaderSurface(model: model) { showingSettings = true }
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -162,6 +198,8 @@ struct ReaderProgressLabel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                // Bars propose a narrow width; show the whole line.
+                .fixedSize()
         }
         .accessibilityElement(children: .combine)
     }
@@ -179,5 +217,121 @@ enum ReaderProgressText {
         default:
             return ""
         }
+    }
+}
+
+/// Lays the page out for the current Duo pose, from the reader's size and the
+/// fold's division region.
+private struct ReaderSurface: View {
+    let model: ReaderModel
+    let showSettings: () -> Void
+    /// The side space to keep clear, as the difference between the safe frame
+    /// and the edge-to-edge frame. (A view that ignores the safe area reports
+    /// zero insets, so they're measured this way.) Global coordinates are
+    /// physical left to right, as the Duo's panels are.
+    private static func sideInsets(safe: CGRect, full: CGRect) -> ReaderLayout.SideInsets {
+        ReaderLayout.SideInsets(left: max(0, safe.minX - full.minX), right: max(0, full.maxX - safe.maxX))
+    }
+
+    var body: some View {
+        GeometryReader { safe in
+            // Edge to edge: Readium insets the page for the top and bottom
+            // safe areas itself, and the layout keeps the page clear of the
+            // side rail while centring a spread on the hinge.
+            GeometryReader { full in
+                surface(in: full, insets: Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global)))
+            }
+            .ignoresSafeArea(.container)
+        }
+    }
+
+    private func surface(in proxy: GeometryProxy, insets: ReaderLayout.SideInsets) -> some View {
+        Group {
+            let fold = proxy.reservedRegions(kind: .division).first?.frame
+            let layout = ReaderLayout.resolve(
+                size: proxy.size,
+                fold: fold,
+                insets: insets,
+                spread: model.settings.spread,
+                flow: model.settings.flow
+            )
+            ZStack(alignment: .topLeading) {
+                NavigatorHost(model: model, settings: model.settings)
+                    .frame(width: layout.pageFrame.width, height: layout.pageFrame.height)
+                    .offset(x: layout.pageFrame.minX, y: layout.pageFrame.minY)
+
+                if let controls = layout.controlsFrame {
+                    ReaderSidePanel(model: model, pose: layout.pose, showSettings: showSettings)
+                        .frame(width: controls.width, height: controls.height)
+                        .offset(x: controls.minX, y: controls.minY)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            // Fade the panel in and out, but don't animate the page's frame:
+            // the web view would repaginate and then slide.
+            .animation(.easeInOut(duration: 0.25), value: layout.controlsFrame != nil)
+            .onChange(of: layout, initial: true) { _, new in
+                model.layout = new
+            }
+        }
+    }
+}
+
+/// Controls that get their own space instead of overlaying the page: on the
+/// lower half in tabletop pose, or beside a single page in book pose.
+struct ReaderSidePanel: View {
+    let model: ReaderModel
+    let pose: ReaderLayout.Pose
+    let showSettings: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            ReaderProgressLabel(
+                progression: model.progression,
+                chapterTitle: model.chapterTitle,
+                position: model.position,
+                positionCount: model.positionCount
+            )
+            if let progression = model.progression {
+                ProgressView(value: min(max(progression, 0), 1))
+                    .frame(maxWidth: 360)
+                    .accessibilityHidden(true)
+            }
+            HStack(spacing: 32) {
+                Button {
+                    // Through the page host, so turns use the chosen animation.
+                    Task { await model.requestTurn?(.backward) }
+                } label: {
+                    Label("Previous Page", systemImage: "chevron.backward")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                Button(action: showSettings) {
+                    Label("Reading Settings", systemImage: "textformat.size")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityHint(Text("Theme, font and layout"))
+                Button {
+                    Task { await model.requestTurn?(.forward) }
+                } label: {
+                    Label("Next Page", systemImage: "chevron.forward")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+            }
+            .labelStyle(.iconOnly)
+            .font(.title2)
+            .buttonStyle(.borderless)
+            Spacer(minLength: 0)
+        }
+        .padding()
+        // The reader ignores the vertical safe area, so keep the buttons
+        // clear of the home indicator when the panel is at the bottom.
+        .padding(.bottom, pose == .tabletop ? 20 : 0)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Reader Controls"))
+        .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
+        .background(Color(uiColor: model.palette.background.uiColor))
     }
 }

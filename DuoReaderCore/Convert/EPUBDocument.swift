@@ -25,6 +25,8 @@ public struct EPUBDocument: Equatable, Sendable {
     public var summary: String?
     /// Extra `dc:identifier`s, such as an AO3 work URL.
     public var sourceIdentifiers: [String] = []
+    /// A cover image (JPEG, PNG or GIF bytes), when the source file has one.
+    public var coverImage: Data?
     public var chapters: [Chapter]
 
     public init(title: String, authors: [String] = [], chapters: [Chapter]) {

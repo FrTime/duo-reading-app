@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -6,6 +7,8 @@ struct DuoReaderApp: App {
     private let container: ModelContainer
     @State private var importController: ImportController
     @State private var recoveredLibrary: Bool
+    private let widgetWriter: WidgetSnapshotWriter
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let opened: LibraryStore.OpenResult
@@ -19,6 +22,7 @@ struct DuoReaderApp: App {
         container = opened.container
         _recoveredLibrary = State(initialValue: opened.recoveredFrom != nil)
         _importController = State(initialValue: ImportController(container: opened.container))
+        widgetWriter = WidgetSnapshotWriter(container: opened.container)
         if opened.recoveredFrom != nil {
             // Rebuild the shelf after launch, off the main thread.
             let container = opened.container
@@ -34,25 +38,53 @@ struct DuoReaderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(importController)
-                // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
-                .onOpenURL { url in
-                    importController.importFiles([url])
-                }
-                .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
-                    Button("OK") {}
-                } message: {
-                    Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
-                }
+            mainContent
         }
         .modelContainer(container)
+    }
+
+    /// Writes the widget snapshot as the app leaves the screen, which is when
+    /// the home screen (and its widgets) come back into view.
+    private func refreshWidgetsInBackground() {
+        let writer = widgetWriter
+        let assertion = BackgroundAssertion()
+        assertion.begin(named: "Update widgets")
+        Task {
+            await writer.refresh()
+            assertion.end()
+        }
+    }
+
+    private var mainContent: some View {
+        RootView()
+            .environment(importController)
+            // "Open in Duo Reader" from Files, Mail, Safari and the share
+            // sheet. Widget links are handled by `RootView`.
+            .onOpenURL { url in
+                guard !WidgetLink.isWidgetLink(url) else { return }
+                importController.importFiles([url])
+            }
+            // Keep the home screen widgets in step with the library. The
+            // importer saves on its own context, so hop to the main queue.
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
+                widgetWriter.refreshSoon()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { refreshWidgetsInBackground() }
+            }
+            .task { await widgetWriter.refresh() }
+            .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
+                Button("OK") {}
+            } message: {
+                Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
+            }
     }
 }
 
 /// The library, with the reader presented over it.
 private struct RootView: View {
     @State private var openBook: Book?
+    @Environment(\.modelContext) private var modelContext
     #if DEBUG
     @Query(sort: \Book.shelfOrder) private var books: [Book]
     #endif
@@ -62,14 +94,53 @@ private struct RootView: View {
             .fullScreenCover(item: $openBook) { book in
                 ReaderView(book: book)
             }
+            // Taps on a widget open that book where it was left.
+            .onOpenURL { url in
+                guard WidgetLink.isWidgetLink(url) else { return }
+                guard let id = WidgetLink.bookID(from: url) else {
+                    openBook = nil
+                    return
+                }
+                var descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.id == id })
+                descriptor.fetchLimit = 1
+                if let book = try? modelContext.fetch(descriptor).first, book.id != openBook?.id {
+                    openBook = book
+                }
+            }
+            // The open book's cover on iPhone Duo's outer screen.
+            .modifier(OuterCoverAccessory(book: openBook))
             #if DEBUG
-            // `-DuoReaderOpenFirstBook` opens the first book at launch, so the
-            // reader can be screenshotted on a simulator without tapping.
+            // `-DuoReaderOpenFirstBook` opens the first book at launch, and
+            // `-DuoReaderOpenBook <title>` the first whose title contains
+            // <title>, so the reader can be screenshotted on a shared
+            // simulator without tapping through the library.
             .task {
-                if ProcessInfo.processInfo.arguments.contains("-DuoReaderOpenFirstBook") {
+                let arguments = ProcessInfo.processInfo.arguments
+                if let index = arguments.firstIndex(of: "-DuoReaderOpenBook"), arguments.indices.contains(index + 1) {
+                    let title = arguments[index + 1]
+                    openBook = books.first { $0.title.localizedCaseInsensitiveContains(title) }
+                } else if arguments.contains("-DuoReaderOpenFirstBook") {
                     openBook = books.first
                 }
             }
             #endif
+    }
+}
+
+/// Asks for a little background time, and gives it back exactly once.
+@MainActor
+private final class BackgroundAssertion {
+    private var identifier = UIBackgroundTaskIdentifier.invalid
+
+    func begin(named name: String) {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }

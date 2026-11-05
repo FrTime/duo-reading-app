@@ -95,7 +95,7 @@ public actor LibraryImporter {
         if let converter {
             let temporary = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).epub")
             do {
-                try await EPUBWriter.write(converter.document(from: url), to: temporary)
+                try await converter.convert(url, to: temporary)
             } catch {
                 try? FileManager.default.removeItem(at: temporary)
                 let reason: ImportFailure = (error as? ConversionError) == .tooLarge ? .tooLarge : .unreadable
@@ -120,7 +120,13 @@ public actor LibraryImporter {
         let destination = booksFolder.appending(path: relativePath)
         do {
             try FileManager.default.createDirectory(at: booksFolder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: source, to: destination)
+            if convertedCopy != nil {
+                // Ours to move: saves writing a large converted book twice.
+                try FileManager.default.moveItem(at: source, to: destination)
+                convertedCopy = nil
+            } else {
+                try FileManager.default.copyItem(at: source, to: destination)
+            }
         } catch {
             return .failed(fileName: fileName, reason: .copyFailed)
         }
