@@ -40,6 +40,9 @@ struct WidgetSnapshot: Codable, Sendable, Equatable {
         var progress: Double
         /// Spine width as a fraction of the cover's width.
         var thickness: Double
+        /// The book's size relative to the others (`CoverDesign.sizeScale`),
+        /// so taller and shorter books stand as they do in the app.
+        var sizeScale: Double = 1
         var baseColor: Color
         var spineColor: Color
         var lastOpened: Date?
@@ -176,6 +179,7 @@ struct WidgetShelfLayout: Equatable, Sendable {
     struct Placed: Equatable, Sendable, Identifiable {
         var book: WidgetSnapshot.Book
         var width: Double
+        var height: Double
         var id: UUID { book.id }
     }
 
@@ -207,8 +211,17 @@ struct WidgetShelfLayout: Equatable, Sendable {
         self.init(rows: rows, overflow: total - rows.joined().count)
     }
 
+    /// The tallest a book may stand relative to `bookHeight`. Callers make
+    /// rows this much taller than `bookHeight` so no book hits the shelf above.
+    static let maxScale = 1.15
+
+    static func height(of book: WidgetSnapshot.Book, bookHeight: Double) -> Double {
+        let scale = book.sizeScale.isFinite ? book.sizeScale : 1
+        return bookHeight * min(max(scale, 0.8), maxScale)
+    }
+
     static func width(of book: WidgetSnapshot.Book, style: WidgetSnapshot.ShelfStyle, bookHeight: Double) -> Double {
-        let coverWidth = bookHeight * 2 / 3
+        let coverWidth = height(of: book, bookHeight: bookHeight) * 2 / 3
         switch style {
         case .covers: return coverWidth
         case .spines: return max(coverWidth * book.thickness, minimumSpineWidth)
@@ -226,7 +239,7 @@ struct WidgetShelfLayout: Equatable, Sendable {
                 let limit = row == rows.count - 1 ? lastRowWidth : rowWidth
                 let needed = used == 0 ? width : used + spacing + width
                 if needed <= limit + 0.0001 {
-                    rows[row].append(Placed(book: book, width: width))
+                    rows[row].append(Placed(book: book, width: width, height: height(of: book, bookHeight: bookHeight)))
                     used = needed
                     break
                 }

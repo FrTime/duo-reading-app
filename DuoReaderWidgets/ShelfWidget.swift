@@ -45,7 +45,8 @@ struct ShelfWidgetView: View {
         let inset = ShelfPalette.inset
         let rowWidth = size.width - inset * 2
         let rowHeight = (size.height - inset * 2) / CGFloat(rowCount)
-        let bookHeight = max(rowHeight - ShelfPalette.boardHeight - ShelfPalette.headroom, 20)
+        // The tallest book still clears the board above.
+        let bookHeight = max((rowHeight - ShelfPalette.boardHeight - ShelfPalette.headroom) / WidgetShelfLayout.maxScale, 20)
         let layout = WidgetShelfLayout(
             books: snapshot.books, totalCount: snapshot.totalBookCount, style: snapshot.shelfStyle,
             rowCount: rowCount, rowWidth: rowWidth, bookHeight: bookHeight)
@@ -90,7 +91,7 @@ private struct ShelfRow: View {
                         .accessibilityLabel("\(overflow) more books")
                 }
             }
-            .frame(height: bookHeight, alignment: .bottom)
+            .frame(height: bookHeight * WidgetShelfLayout.maxScale, alignment: .bottom)
             Board()
         }
     }
@@ -100,10 +101,10 @@ private struct ShelfRow: View {
         switch style {
         case .spines:
             SpineArtwork(book: placed.book)
-                .frame(width: placed.width, height: bookHeight)
+                .frame(width: placed.width, height: placed.height)
         case .covers:
             CoverArtwork(book: placed.book, kind: .front, cornerRadius: 2)
-                .frame(width: placed.width, height: bookHeight)
+                .frame(width: placed.width, height: placed.height)
         }
     }
 }
@@ -131,5 +132,5 @@ enum ShelfPalette {
 
     static let inset: CGFloat = 12
     static let boardHeight: CGFloat = 7
-    static let headroom: CGFloat = 8
+    static let headroom: CGFloat = 4
 }

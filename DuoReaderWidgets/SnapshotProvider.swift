@@ -37,8 +37,10 @@ struct SnapshotProvider: TimelineProvider {
 /// Loads the small images the app wrote. Only images on screen are loaded,
 /// because the extension's memory limit is tight.
 enum WidgetImages {
+    private static let store = WidgetStore.shared()
+
     static func image(_ kind: WidgetStore.ImageKind, for id: UUID) -> UIImage? {
-        guard let url = WidgetStore.shared()?.imageURL(kind, for: id) else { return nil }
+        guard let url = store?.imageURL(kind, for: id) else { return nil }
         return UIImage(contentsOfFile: url.path(percentEncoded: false))
     }
 }
@@ -46,6 +48,12 @@ enum WidgetImages {
 extension WidgetSnapshot.Color {
     var color: Color { Color(.sRGB, red: red, green: green, blue: blue) }
     var textColor: Color { prefersLightText ? .white : .black }
+
+    /// Text colour for a widget that may be drawn without its background
+    /// (StandBy, clear and tinted home screens), where the backdrop is dark.
+    func textColor(showsBackground: Bool) -> Color {
+        showsBackground ? textColor : .white
+    }
 }
 
 extension WidgetSnapshot.Book {

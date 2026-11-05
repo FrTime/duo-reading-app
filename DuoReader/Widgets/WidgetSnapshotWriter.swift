@@ -14,6 +14,8 @@ final class WidgetSnapshotWriter {
     /// What the writer needs from a book's cover design.
     struct CoverInfo: Sendable {
         var thickness: Double
+        /// Relative size on the shelf. 1 until the cover editor adds per-book sizes.
+        var sizeScale: Double = 1
         var baseColor: RGBAColor
         var spineColor: RGBAColor
         /// Where the rendered front and spine are, if they've been rendered.
@@ -48,7 +50,7 @@ final class WidgetSnapshotWriter {
     }
 
     /// Refreshes after `delay`, folding any further requests in that time into one.
-    func refreshSoon(after delay: Duration = .seconds(5)) {
+    func refreshSoon(after delay: Duration = .seconds(15)) {
         scheduled?.cancel()
         scheduled = Task { [weak self] in
             try? await Task.sleep(for: delay)
@@ -148,6 +150,7 @@ final class WidgetSnapshotWriter {
             author: book.displayAuthors,
             progress: book.progress,
             thickness: cover?.thickness ?? 0.12,
+            sizeScale: cover?.sizeScale ?? 1,
             baseColor: WidgetSnapshot.Color(base),
             spineColor: WidgetSnapshot.Color(spine),
             lastOpened: book.lastOpened

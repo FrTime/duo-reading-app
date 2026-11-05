@@ -46,6 +46,7 @@ struct NowReadingWidgetView: View {
 /// Small: the cover, with a progress ring beside it.
 private struct NowReadingSmallView: View {
     var book: WidgetSnapshot.Book
+    @Environment(\.showsWidgetContainerBackground) private var showsBackground
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -57,8 +58,8 @@ private struct NowReadingSmallView: View {
                     .font(.system(size: 11, weight: .semibold).monospacedDigit())
             }
             .gaugeStyle(.accessoryCircularCapacity)
-            .tint(book.baseColor.textColor)
-            .foregroundStyle(book.baseColor.textColor)
+            .tint(book.baseColor.textColor(showsBackground: showsBackground))
+            .foregroundStyle(book.baseColor.textColor(showsBackground: showsBackground))
             .frame(width: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -70,9 +71,10 @@ private struct NowReadingSmallView: View {
 /// Medium: cover, title, author, progress and Resume.
 private struct ContinueReadingView: View {
     var book: WidgetSnapshot.Book
+    @Environment(\.showsWidgetContainerBackground) private var showsBackground
 
     var body: some View {
-        let text = book.baseColor.textColor
+        let text = book.baseColor.textColor(showsBackground: showsBackground)
         HStack(spacing: 14) {
             CoverArtwork(book: book)
             VStack(alignment: .leading, spacing: 3) {

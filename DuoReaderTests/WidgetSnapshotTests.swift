@@ -137,6 +137,17 @@ struct WidgetSnapshotTests {
         #expect(WidgetShelfLayout.width(of: book(), style: .covers, bookHeight: 90) == 60)
     }
 
+    @Test func sizeScaleChangesHeightAndWidthAndIsClamped() {
+        var tall = book(thickness: 0.25)
+        tall.sizeScale = 1.1
+        #expect(abs(WidgetShelfLayout.height(of: tall, bookHeight: 90) - 99) < 0.0001)
+        #expect(abs(WidgetShelfLayout.width(of: tall, style: .covers, bookHeight: 90) - 66) < 0.0001)
+        tall.sizeScale = 3
+        #expect(WidgetShelfLayout.height(of: tall, bookHeight: 90) == 90 * WidgetShelfLayout.maxScale)
+        tall.sizeScale = .nan
+        #expect(WidgetShelfLayout.height(of: tall, bookHeight: 90) == 90)
+    }
+
     @Test func emptyRowsStillExist() {
         let layout = WidgetShelfLayout(books: [book()], totalCount: 1, style: .covers,
                                        rowCount: 3, rowWidth: 300, bookHeight: 90)
