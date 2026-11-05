@@ -141,8 +141,14 @@ final class ReaderModel {
             guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return nil }
             return arguments[index + 1]
         }
-        if let theme = argument("-DuoReaderTheme").flatMap(ReaderTheme.init(rawValue:)) { settings.theme = theme }
-        if let font = argument("-DuoReaderFont").flatMap(ReaderFont.init(rawValue:)) { settings.font = font }
+        if let theme = argument("-DuoReaderTheme").flatMap(ReaderTheme.init(rawValue:)) {
+            settings.theme = theme
+            savesSettings = false
+        }
+        if let font = argument("-DuoReaderFont").flatMap(ReaderFont.init(rawValue:)) {
+            settings.font = font
+            savesSettings = false
+        }
         #endif
         progression = book.progress
     }
@@ -260,6 +266,10 @@ final class ReaderModel {
         ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: ReadiumPreferences.spread(pages: layout?.columns ?? 1))
     }
 
+    /// False while DEBUG launch arguments override the settings, so the
+    /// override isn't saved over the reader's own choices.
+    @ObservationIgnored private var savesSettings = true
+
     /// Saves and applies settings shortly after the last change, so dragging
     /// a slider doesn't re-paginate the book on every tick.
     private func scheduleSettingsUpdate() {
@@ -275,7 +285,7 @@ final class ReaderModel {
     func commitSettings() {
         settingsUpdate?.cancel()
         settingsUpdate = nil
-        settingsStore.save(settings)
+        if savesSettings { settingsStore.save(settings) }
         applySettings()
     }
 

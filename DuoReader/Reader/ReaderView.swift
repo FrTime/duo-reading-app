@@ -271,13 +271,16 @@ struct ReaderProgressLabel: View {
     let positionCount: Int?
 
     var body: some View {
+        // Both lines always take their space, so the bar doesn't grow when
+        // the chapter and location arrive a moment after the page.
+        let title = chapterTitle ?? ""
+        let summary = ReaderProgressText.summary(progression: progression, position: position, positionCount: positionCount)
         VStack(spacing: 2) {
-            if let chapterTitle, !chapterTitle.isEmpty {
-                Text(chapterTitle)
-                    .font(.footnote.weight(.medium))
-                    .lineLimit(1)
-            }
-            Text(ReaderProgressText.summary(progression: progression, position: position, positionCount: positionCount))
+            Text(title.isEmpty ? " " : title)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+                .accessibilityHidden(title.isEmpty)
+            Text(summary.isEmpty ? " " : summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
