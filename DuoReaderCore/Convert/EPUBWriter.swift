@@ -28,6 +28,9 @@ public enum EPUBWriter {
             ("OEBPS/nav.xhtml", Data(navigation(document, chapters: chapters, files: names).utf8)),
             ("OEBPS/style.css", Data(stylesheet.utf8)),
         ]
+        if let cover = document.coverImage, let type = imageType(cover) {
+            files.append(("OEBPS/cover.\(type.ext)", cover))
+        }
         for (chapter, name) in zip(chapters, names) {
             files.append(("OEBPS/\(name)", Data(page(chapter, bookTitle: document.title, language: document.language).utf8)))
         }
@@ -76,7 +79,7 @@ public enum EPUBWriter {
             \(metadata)  </metadata>
               <manifest>
                 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
-                <item id="css" href="style.css" media-type="text/css"/>
+                <item id="css" href="style.css" media-type="text/css"/>\(coverItem(document))
             \(manifest)
               </manifest>
               <spine>
@@ -84,6 +87,19 @@ public enum EPUBWriter {
               </spine>
             </package>
             """
+    }
+
+    /// The image's extension and media type, from its magic bytes.
+    static func imageType(_ data: Data) -> (ext: String, mediaType: String)? {
+        if data.starts(with: [0xFF, 0xD8, 0xFF]) { return ("jpg", "image/jpeg") }
+        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return ("png", "image/png") }
+        if data.starts(with: Array("GIF8".utf8)) { return ("gif", "image/gif") }
+        return nil
+    }
+
+    private static func coverItem(_ document: EPUBDocument) -> String {
+        guard let cover = document.coverImage, let type = imageType(cover) else { return "" }
+        return "\n" + #"        <item id="cover" href="cover.\#(type.ext)" media-type="\#(type.mediaType)" properties="cover-image"/>"#
     }
 
     static func navigation(_ document: EPUBDocument, chapters: [EPUBDocument.Chapter], files: [String]) -> String {
