@@ -9,6 +9,8 @@ extension DuoReaderSchemaV1 {
     /// security-scoped bookmark to a file it doesn't own.
     @Model
     public final class Book {
+        #Index<Book>([\.contentHash])
+
         @Attribute(.unique) public var id: UUID
         /// Path of the imported file relative to the library folder.
         public var relativeFilePath: String
@@ -61,7 +63,7 @@ extension DuoReaderSchemaV1 {
             self.shelfOrder = shelfOrder
         }
 
-        /// Title and authors for display, e.g. "Title — A, B".
+        /// Authors for display, e.g. "A, B and C", or "Unknown author" when there are none.
         public var displayAuthors: String {
             authors.isEmpty ? String(localized: "Unknown author") : authors.formatted(.list(type: .and))
         }

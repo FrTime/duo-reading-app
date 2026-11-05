@@ -25,7 +25,7 @@ struct LibraryStoreTests {
         #expect(fetched.first?.progress == 0)
     }
 
-    @Test func unknownFormatFallsBackToEpub() throws {
+    @Test func unknownFormatFallsBackToEpub() {
         let book = Book(relativeFilePath: "x", contentHash: "x", format: .pdf, title: "X")
         book.formatRawValue = "something-new"
         #expect(book.format == .epub)
