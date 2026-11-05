@@ -50,6 +50,31 @@ struct ShelfLayoutTests {
         #expect(gaps.allSatisfy { abs($0 - gaps[0]) < 0.0001 })
     }
 
+    @Test func coversModeLeavesAGapBetweenBooks() {
+        let layout = ShelfLayout(books: books(20), mode: .covers, shelfWidth: 1.3)
+        let firstRow = layout.slots.filter { $0.row == 0 }
+        for (left, right) in zip(firstRow, firstRow.dropFirst()) {
+            #expect((right.x - right.footprint / 2) - (left.x + left.footprint / 2) >= metrics.coverGap - 0.0001)
+        }
+    }
+
+    @Test func caseFillsTheScreenAndHasASpareShelf() {
+        let few = ShelfLayout(books: books(3), mode: .spines, shelfWidth: 1, minimumCaseRows: 4)
+        #expect(few.rowCount == 1)
+        #expect(few.caseRowCount == 4)
+        #expect(few.caseBottom < few.contentBottom)
+        let many = ShelfLayout(books: books(200), mode: .spines, shelfWidth: 0.5, minimumCaseRows: 2)
+        #expect(many.caseRowCount == many.rowCount + 1)
+        // Empty shelves in the case still accept a dropped book, at the end.
+        #expect(few.insertionIndex(x: 0, y: ShelfLayout.baseY(row: 3, metrics: metrics) + 0.1) == 3)
+    }
+
+    @Test func rowsToFillCoverTheHeight() {
+        let rows = ShelfLayout.rowsToFill(height: 1.0, metrics: metrics)
+        #expect(Float(rows - 1) * metrics.rowHeight >= 1.0)
+        #expect(ShelfLayout.rowsToFill(height: 0, metrics: metrics) == 1)
+    }
+
     @Test func thickerBooksTakeMoreRoom() {
         let thin = ShelfBookSpec(id: UUID(), thickness: 0.05)
         let thick = ShelfBookSpec(id: UUID(), thickness: 0.3)

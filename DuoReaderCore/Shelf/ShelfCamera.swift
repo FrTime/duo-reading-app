@@ -8,9 +8,10 @@ import simd
 public struct ShelfCamera: Equatable, Sendable {
     /// Vertical field of view.
     public static let fieldOfViewDegrees: Float = 40
-    /// Screen points per scene unit, so a book is about 144 pt tall on any
-    /// screen and wider screens (the open Duo) show more books per shelf.
-    public static let pointsPerUnit: Float = 600
+    /// Screen points per scene unit, so a book is about 173 pt tall on any
+    /// screen (spine titles stay legible) and wider screens (the open Duo)
+    /// show more books per shelf.
+    public static let pointsPerUnit: Float = 720
 
     public var viewSize: CGSize
     /// Height of the point the camera looks at.
