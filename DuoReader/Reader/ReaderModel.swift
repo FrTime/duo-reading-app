@@ -29,9 +29,32 @@ final class ReaderModel {
     /// Whether the top and bottom bars are showing.
     var isChromeVisible = true
 
-    /// Width for docked settings, from the spine to the right edge. Nil
-    /// lets the inspector choose. Set by the view.
-    var settingsColumnWidth: CGFloat?
+    /// Where docked settings should start: the spine (the fold, or the
+    /// middle of a flat screen), in window coordinates. Nil when the screen
+    /// is too narrow to dock them. Set by the view.
+    var settingsSpineX: CGFloat? {
+        didSet { if settingsSpineX != oldValue { settingsColumnCorrection = 0 } }
+    }
+    /// The window width that goes with `settingsSpineX`.
+    @ObservationIgnored var settingsWindowWidth: CGFloat = 0
+    /// How far the inspector's own chrome (e.g. the side rail) moves it, found
+    /// from where it actually lands. Its width doesn't map 1:1 to where its
+    /// edge ends up on the Duo, so this closes the gap after one layout.
+    private var settingsColumnCorrection: CGFloat = 0
+
+    /// Width for docked settings so they start at the spine. Nil lets the
+    /// inspector choose.
+    var settingsColumnWidth: CGFloat? {
+        settingsSpineX.map { settingsWindowWidth - $0 + settingsColumnCorrection }
+    }
+
+    /// Called with the docked settings' left edge, in window coordinates.
+    func settingsPanelLanded(atX leftEdge: CGFloat) {
+        guard let spine = settingsSpineX else { return }
+        let error = leftEdge - spine
+        // Ignore tiny differences, and anything far off (the panel is a sheet).
+        if abs(error) > 1, abs(error) < 160 { settingsColumnCorrection += error }
+    }
 
     /// A web or mail link the reader tapped, waiting for confirmation.
     var pendingExternalURL: URL?

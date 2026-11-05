@@ -86,6 +86,9 @@ struct ReaderView: View {
                 // screen, so they meet the crease instead of covering a
                 // sliver of the right page.
                 .inspectorColumnWidth(min: 320, ideal: model.settingsColumnWidth ?? 360, max: max(420, model.settingsColumnWidth ?? 0))
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: {
+                    model.settingsPanelLanded(atX: $0)
+                }
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -333,9 +336,11 @@ private struct ReaderSurface: View {
                     .onChange(of: safe.frame(in: .global).minY, initial: true) { _, barBottom in
                         if barsShown { model.titleBarBottom = barBottom }
                     }
-                    .onChange(of: settingsColumnWidth(in: full), initial: true) { _, width in
+                    .onChange(of: settingsSpine(in: full), initial: true) { _, spine in
                         // Not while settings show, in case they narrow the page.
-                        if !settingsShown { model.settingsColumnWidth = width }
+                        guard !settingsShown else { return }
+                        model.settingsWindowWidth = full.size.width
+                        model.settingsSpineX = spine
                     }
             }
             .ignoresSafeArea(.container)
@@ -344,11 +349,11 @@ private struct ReaderSurface: View {
 
     /// Docked settings fill everything right of the spine (the fold, or the
     /// middle of a flat screen) when the screen is wide enough for two
-    /// pages; otherwise the inspector keeps its own width.
-    private func settingsColumnWidth(in proxy: GeometryProxy) -> CGFloat? {
+    /// pages; otherwise the inspector keeps its own width. `proxy` is edge
+    /// to edge, so its coordinates are the window's.
+    private func settingsSpine(in proxy: GeometryProxy) -> CGFloat? {
         guard proxy.size.width >= ReaderLayout.automaticSpreadMinWidth else { return nil }
-        let spine = proxy.reservedRegions(kind: .division).first?.frame.midX ?? proxy.size.width / 2
-        return (proxy.size.width - spine).rounded()
+        return proxy.reservedRegions(kind: .division).first?.frame.midX ?? proxy.size.width / 2
     }
 
     static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {
