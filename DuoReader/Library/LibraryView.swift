@@ -64,11 +64,11 @@ struct LibraryView: View {
             importController.summary?.title ?? "",
             isPresented: Binding(
                 get: { importController.summary.map { !$0.isQuietSuccess } ?? false },
-                set: { if !$0 { importController.summary = nil } }
+                set: { if !$0, importController.summary != nil { importController.dismissSummary() } }
             ),
             presenting: importController.summary
         ) { _ in
-            Button("OK") { importController.summary = nil }
+            Button("OK") { importController.dismissSummary() }
         } message: { summary in
             Text(summary.message)
         }
@@ -105,7 +105,7 @@ struct LibraryView: View {
             ContentUnavailableView {
                 Label("Your shelf is empty", systemImage: "books.vertical")
             } description: {
-                Text("Import EPUB or PDF files from Files, or drag them here.")
+                Text("Import books from Files, or drag them here. EPUB, PDF, Kindle, Word, FictionBook, comics, text and web pages all work.")
             } actions: {
                 Button("Import Books") { showingPicker = true }
                     .buttonStyle(.borderedProminent)
