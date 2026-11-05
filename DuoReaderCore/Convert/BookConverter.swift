@@ -1,9 +1,21 @@
 import Foundation
 import NaturalLanguage
 
-/// Turns a file the reader can't open directly into an `EPUBDocument`.
-public protocol BookConverter: Sendable {
+/// Turns a file the reader can't open directly into an EPUB file.
+public protocol FileConverter: Sendable {
+    func convert(_ source: URL, to destination: URL) async throws
+}
+
+/// A converter that builds the whole book in memory as an `EPUBDocument`,
+/// which suits text formats. Comics stream page by page instead.
+public protocol BookConverter: FileConverter {
     func document(from url: URL) async throws -> EPUBDocument
+}
+
+extension BookConverter {
+    public func convert(_ source: URL, to destination: URL) async throws {
+        try await EPUBWriter.write(document(from: source), to: destination)
+    }
 }
 
 public enum ConversionError: Error, Equatable {
@@ -16,23 +28,28 @@ public enum ConversionError: Error, Equatable {
 public enum BookConverters {
     /// Text formats are small; anything this big is almost certainly not a book.
     public static let maxSourceBytes = 50 * 1024 * 1024
+    /// HTML is parsed into a full DOM, which takes several times the file
+    /// size in memory, so it gets a lower cap. A 500k-word AO3 work is ~5 MB.
+    public static let maxHTMLBytes = 20 * 1024 * 1024
 
     /// The converter for a format, or nil when it's read natively or not supported yet.
-    public static func converter(for format: BookFormat) -> (any BookConverter)? {
+    public static func converter(for format: BookFormat) -> (any FileConverter)? {
         switch format {
+        case .cbz: ComicConverter()
         case .txt: PlainTextConverter()
         case .markdown: MarkdownConverter()
         case .rtf: RTFConverter()
+        case .html: HTMLConverter()
         default: nil
         }
     }
 
-    /// Reads the file, refusing anything over `maxSourceBytes`.
-    static func readSource(_ url: URL) throws -> Data {
+    /// Reads the file, refusing anything over `limit`.
+    static func readSource(_ url: URL, limit: Int = maxSourceBytes) throws -> Data {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size <= maxSourceBytes else { throw ConversionError.tooLarge }
+        guard size <= limit else { throw ConversionError.tooLarge }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard data.count <= maxSourceBytes else { throw ConversionError.tooLarge }
+        guard data.count <= limit else { throw ConversionError.tooLarge }
         return data
     }
 

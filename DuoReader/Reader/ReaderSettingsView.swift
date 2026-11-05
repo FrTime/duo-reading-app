@@ -9,6 +9,8 @@ struct ReaderSettingsView: View {
     @Binding var settings: ReaderSettings
     /// PDFs keep their own typography, so only colour and layout show for them.
     var isReflowable = true
+    /// Whether to offer the outer-screen cover, and what to say about it.
+    var outerCoverStatus: OuterCoverPolicy.Status = .unsupported
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -24,6 +26,7 @@ struct ReaderSettingsView: View {
                     spacingSection
                 }
                 pageTurningSection
+                OuterCoverSettingsSection(status: outerCoverStatus, camera: .shared)
                 Section {
                     Button("Reset to Defaults", role: .destructive) {
                         settings = .default

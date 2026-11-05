@@ -3,9 +3,9 @@ import UniformTypeIdentifiers
 
 /// The file formats the library knows about.
 ///
-/// EPUB, PDF and CBZ are rendered directly. Everything else is converted to
-/// EPUB on import, so the reader and annotations only ever deal with three
-/// formats (see the roadmap, #1).
+/// EPUB and PDF are rendered directly. Everything else is converted to EPUB
+/// on import (comics to fixed-layout EPUB), so the reader and annotations only
+/// ever deal with two formats (see the roadmap, #1).
 public enum BookFormat: String, Codable, CaseIterable, Sendable {
     case epub
     case pdf
@@ -41,7 +41,7 @@ public enum BookFormat: String, Codable, CaseIterable, Sendable {
     /// Whether the reader opens this format as-is, without converting it first.
     public var isRenderedNatively: Bool {
         switch self {
-        case .epub, .pdf, .cbz: true
+        case .epub, .pdf: true
         default: false
         }
     }

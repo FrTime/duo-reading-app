@@ -13,6 +13,9 @@ struct ReaderView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @State private var showingSettings = false
+    @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
+    @State private var hinge: OuterCoverPolicy.Hinge = .none
+    @State private var outerCoverCamera = OuterCoverCamera.shared
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -39,7 +42,11 @@ struct ReaderView: View {
         // inside it, the settings' own title and Done button took over the
         // reader's bar.
         .inspector(isPresented: $showingSettings) {
-            ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+            ReaderSettingsView(
+                settings: $model.settings,
+                isReflowable: model.isReflowable,
+                outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs)
+            )
                 .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
@@ -55,8 +62,17 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.flush() }
+            if phase == .active { outerCoverCamera.refreshAccess() }
         }
-        .onDisappear { model.close() }
+        .onDisappear {
+            model.close()
+            outerCoverCamera.setRunning(false)
+        }
+        .modifier(OuterCoverCameraControl(
+            hinge: $hinge,
+            camera: outerCoverCamera,
+            shouldRunCamera: OuterCoverPolicy.shouldRunCamera(outerCoverInputs)
+        ))
         .confirmationDialog(
             "Open This Link?",
             isPresented: Binding(
@@ -74,6 +90,16 @@ struct ReaderView: View {
         } message: { url in
             Text(url.host() ?? url.absoluteString)
         }
+    }
+
+    private var outerCoverInputs: OuterCoverPolicy.Inputs {
+        OuterCoverPolicy.Inputs(
+            isEnabled: showsCoverOnOutside,
+            cameraAccess: outerCoverCamera.access,
+            hinge: hinge,
+            isActive: scenePhase == .active,
+            isReaderReady: model.state == .ready
+        )
     }
 
     private var pageColor: Color {

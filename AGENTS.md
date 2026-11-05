@@ -79,3 +79,42 @@ xcodebuild test -project DuoReader.xcodeproj -scheme DuoReader \
   result is posted on the PR. GitHub Actions CI (`.github/workflows/ci.yml`) is
   manual-only until Actions billing is sorted and runners have Xcode 27.1.
 - Put test books in `TestBooks/` (git-ignored). Never commit real ebooks.
+
+### Testing Duo poses without touching the Mac
+
+Nothing on the command line can move the Duo's hinge (`simctl` and `devicectl`
+don't), and Xcode 27.1 has no Simulator.app. Only Device Hub
+(`Xcode-27.1.0.app/Contents/Applications/DeviceHub.app`) has the hinge slider.
+
+**The fold position is not stored in the simulator.** It survived a reboot
+while Device Hub stayed open, but a simulator rebooted after Device Hub quit
+came back closed, and relaunching Device Hub didn't restore it. So keep one
+simulator per pose, leave Device Hub running, and re-set the hinge after the
+Mac restarts or Device Hub quits. Before trusting a pose, check it: in a
+folded Duo only the outer display (`--display=1`) is lit, and the inner one
+(`--display=3`) screenshots black.
+
+| Simulator | Pose | One-time setup |
+| --- | --- | --- |
+| `iPhone Duo (closed)` | folded, app on the outer screen | none (new Duos start closed) |
+| `iPhone Duo (open)` | fully open, app on the inner screen | Device Hub: drag the hinge slider to fully open (redo after Device Hub quits) |
+| `iPhone Duo (half open)` | partially open, book / tabletop | Device Hub: drag the hinge slider to about 90° (redo after Device Hub quits) |
+| `iPhone Duo` | whatever the last person left it in | shared; don't rely on its pose |
+
+Pick one by name: `-destination 'platform=iOS Simulator,name=iPhone Duo (open)'`.
+If a pose sim is in the wrong pose, ask Tim to reset it in Device Hub and test the rest meanwhile. Recreate a missing one with
+`xcrun simctl create "iPhone Duo (open)" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo com.apple.CoreSimulator.SimRuntime.iOS-27-1`.
+
+- **Orientation is scriptable:**
+  `xcrun devicectl device orientation set --device "<udid>" landscapeLeft`
+  (`portrait`, `portraitUpsideDown`, `landscapeLeft`, `landscapeRight`).
+- **Screens:** the outer panel is 466×678 pt and the inner 669×951 pt (@3x).
+  Screenshot either one: `xcrun simctl io <udid> screenshot --display=1 out.png`
+  (outer) or `--display=3` (inner). The images come out in the panel's native
+  rotation, so rotate them before judging the layout.
+- **Input:** while Device Hub has a simulator open, synthesized taps and swipes
+  may not reach it. Prefer launch arguments and logs for automated checks.
+- **Camera:** the simulator has no camera, and it presents
+  `CameraCaptureAccessory` content without a capture session. Hardware does
+  not, so anything that depends on the camera must be checked on a real Duo
+  (see `docs/spikes/outer-screen-cover.md`).

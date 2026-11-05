@@ -14,7 +14,7 @@ public struct PlainTextConverter: BookConverter {
 
     static func document(fromText text: String, fallbackTitle: String) -> EPUBDocument {
         let header = Self.header(in: text)
-        let blocks = Self.blocks(from: text)
+        let blocks = Self.blocks(from: Self.removingLeadingHeader(text))
         let hasHeadings = blocks.contains { if case .heading = $0 { true } else { false } }
         var document = EPUBDocument(
             title: header.title ?? fallbackTitle,
@@ -54,6 +54,25 @@ public struct PlainTextConverter: BookConverter {
         }
         flush()
         return blocks
+    }
+
+    /// Header keys that are metadata, not part of the book.
+    static let headerKeys: Set<String> = [
+        "title", "author", "language", "translator", "editor", "illustrator",
+        "release date", "posting date", "most recently updated", "character set encoding",
+    ]
+
+    /// Drops an opening paragraph made only of "Key: value" metadata lines
+    /// (the Gutenberg header), since it's shown as the book's details instead.
+    static func removingLeadingHeader(_ text: String) -> String {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let start = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return text }
+        let end = lines[start...].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? lines.endIndex
+        let isHeader = lines[start..<end].allSatisfy { line in
+            let parts = line.split(separator: ":", maxSplits: 1)
+            return parts.count == 2 && headerKeys.contains(parts[0].trimmingCharacters(in: .whitespaces).lowercased())
+        }
+        return isHeader ? lines[end...].joined(separator: "\n") : text
     }
 
     struct Header: Equatable {

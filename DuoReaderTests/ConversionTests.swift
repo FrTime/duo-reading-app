@@ -59,11 +59,18 @@ struct PlainTextConverterTests {
         #expect(doc.title == "The Long Road")
         #expect(doc.authors == ["Ada Writer"])
         #expect(doc.language == "en")
-        #expect(doc.chapters.map(\.title) == [nil, "Chapter 1", "Chapter 2: Morning"])
-        let first = doc.chapters[1].body
+        // The header becomes the book's details, not a page of its own.
+        #expect(doc.chapters.map(\.title) == ["Chapter 1", "Chapter 2: Morning"])
+        #expect(!doc.chapters[0].body.contains("Ada Writer"))
+        let first = doc.chapters[0].body
         #expect(first.contains("<p>It was a dark and stormy night.</p>"))
         #expect(first.contains("<p>She &lt;waited&gt; &amp; watched.</p>"))
         #expect(first.contains(#"<hr class="scene-break"/>"#))
+    }
+
+    @Test func keepsOpeningLinesThatAreNotAHeader() {
+        let text = "Title: The Long Road\nIt was raining.\n\nMore."
+        #expect(PlainTextConverter.removingLeadingHeader(text) == text)
     }
 
     @Test func oneParagraphPerLineWhenThereAreNoBlankLines() {
