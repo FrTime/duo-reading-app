@@ -200,8 +200,9 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
         let spineFont = min(0.06, design.thickness * 0.5)
         let hasAuthor = !seed.authorLine.isEmpty
         // Clothbound spines keep clear of the gilt bands at head and foot.
-        let titleSpan = gilt ? (hasAuthor ? 0.12...0.68 : 0.12...0.88) : (hasAuthor ? 0.07...0.73 : 0.08...0.92)
-        let authorSpan = gilt ? 0.71...0.89 : 0.77...0.95
+        // The author gets a generous span so it stays legible on a small spine.
+        let titleSpan = gilt ? (hasAuthor ? 0.12...0.62 : 0.12...0.88) : (hasAuthor ? 0.07...0.66 : 0.08...0.92)
+        let authorSpan = gilt ? 0.65...0.89 : 0.69...0.95
         boxes.append(CoverTextBox(
             face: .spine, role: .title, text: seed.title,
             centerY: (titleSpan.lowerBound + titleSpan.upperBound) / 2, width: 0.8,
@@ -214,7 +215,7 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
                 face: .spine, role: .author, text: seed.authors.first ?? seed.authorLine,
                 centerY: (authorSpan.lowerBound + authorSpan.upperBound) / 2, width: 0.7,
                 height: authorSpan.upperBound - authorSpan.lowerBound,
-                font: font, weight: font == .didot ? .bold : .medium, fontSize: spineFont * 0.7, color: spineText,
+                font: font, weight: font == .didot ? .bold : .medium, fontSize: spineFont * 0.85, color: spineText,
                 isVertical: true, isUppercased: true, hasShadow: shadow
             ))
         }

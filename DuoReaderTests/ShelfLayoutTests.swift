@@ -98,6 +98,34 @@ struct ShelfLayoutTests {
         #expect(layout.divider == nil)
     }
 
+    @Test func pulledOutBooksStayInsideTheCase() {
+        let layout = ShelfLayout(books: books(30), mode: .spines, shelfWidth: 1)
+        let first = layout.slots.first!
+        let x = layout.clampedX(first.x, halfExtent: 0.12)
+        #expect(x - 0.12 >= -layout.shelfWidth / 2 - 1e-6)
+        #expect(layout.clampedX(0, halfExtent: 0.12) == 0)
+        #expect(layout.clampedX(0.49, halfExtent: 0.12) <= layout.shelfWidth / 2 - 0.12 + 1e-6)
+        #expect(layout.clampedX(0.3, halfExtent: 2) == 0)
+        // Nearer the camera less is visible, so the clamp tightens.
+        let camera = ShelfCamera(viewSize: CGSize(width: 720, height: 600))
+        let near = camera.visibleHalfWidth(atZ: 0.2)
+        #expect(near < camera.halfWidth)
+        #expect(layout.clampedX(-0.49, halfExtent: 0.12, visibleHalfWidth: near) >= -near + 0.12 - 1e-6)
+    }
+
+    @Test func booksGrowWithLargerText() {
+        #expect(ShelfCamera.zoom(forTextScale: 1) == 1)
+        #expect(ShelfCamera.zoom(forTextScale: 0.8) == 1)
+        #expect(ShelfCamera.zoom(forTextScale: 2) == 1.5)
+        #expect(ShelfCamera.zoom(forTextScale: 4) == 1.5)
+        let standard = ShelfCamera(viewSize: CGSize(width: 400, height: 700))
+        let zoomed = ShelfCamera(viewSize: CGSize(width: 400, height: 700), zoom: 1.5)
+        #expect(zoomed.halfWidth < standard.halfWidth)
+        let top = zoomed.screenPoint(for: SIMD3(0, metrics.bookHeight, 0))
+        let bottom = zoomed.screenPoint(for: SIMD3(0, 0, 0))
+        #expect(abs((bottom.y - top.y) - CGFloat(metrics.bookHeight * zoomed.scale)) < 0.5)
+    }
+
     @Test func thickerBooksTakeMoreRoom() {
         let thin = ShelfBookSpec(id: UUID(), thickness: 0.05)
         let thick = ShelfBookSpec(id: UUID(), thickness: 0.3)
