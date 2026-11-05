@@ -18,6 +18,16 @@ which is why the cover appeared there with no camera at all. Actually Read's
 "Performative Mode" ships exactly this way: a small live camera preview keeps
 a session running so the cover stays on the outer screen.
 
+## What was tested on a real iPhone Duo (iOS 27.1)
+
+| Experiment | Result |
+| --- | --- |
+| Fully open, accessory registered, **no** capture session | `available` stays `false`; nothing on the outer screen. The camera requirement is enforced on hardware. |
+| Fully open, front camera running (`.low` preset, 1 fps, no outputs) | `available=true` about 2 s after launch; the accessory scene connects and the cover fills the outer screen. The camera-in-use dot shows on the outer screen too. |
+| Battery cost | A/B test pending (15 min off / 15 min on, twice, unplugged). |
+
+![Outer screen of a real iPhone Duo showing the prototype cover](images/outer-cover-open-device.png)
+
 ## What was tested (simulator)
 
 | Experiment | Result |
@@ -36,9 +46,8 @@ a session running so the cover stays on the outer screen.
 
 ## Not yet verified
 
-- **On a real Duo**, with the camera running: that the accessory appears,
-  stays up, and how much battery the session costs. The prototype has a
-  `-autoCamera` launch flag and a 44 pt circular preview for this test.
+- Battery cost of the session on hardware (`-batteryTest` launch flag).
+- Whether the accessory survives the half-open pose on hardware.
 
 ## Options
 
@@ -79,7 +88,7 @@ a session running so the cover stays on the outer screen.
 
 `DuoReader/Spikes/OuterScreenCoverSpike.swift`, DEBUG only. Launch with
 `-coverSpike` (plus `-autoCamera`, `-toggleCameraAccessory`,
-`-noCameraAccessory`, `-legacyWindow` for the individual experiments). It logs
+`-noCameraAccessory`, `-legacyWindow`, `-batteryTest` for the individual experiments). It logs
 to Documents/cover-spike.log. Delete it when the real feature lands.
 
 ## Sources

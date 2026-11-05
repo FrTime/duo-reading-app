@@ -242,6 +242,27 @@ struct OuterScreenCoverSpikeView: View {
             let args = ProcessInfo.processInfo.arguments
             if args.contains("-autoCamera") { camera.start() }
             if args.contains("-noCameraAccessory") { cameraAccessoryEnabled = false }
+            if args.contains("-batteryTest") {
+                // A/B battery check: 15 min camera off, 15 min on, twice, screen kept on.
+                // Logs battery level and thermal state every minute.
+                UIApplication.shared.isIdleTimerDisabled = true
+                UIDevice.current.isBatteryMonitoringEnabled = true
+                Task {
+                    for phase in 0..<4 {
+                        let cameraOn = phase % 2 == 1
+                        cameraOn ? camera.start() : camera.stop()
+                        log.add("battery phase \(phase) camera=\(cameraOn ? "on" : "off")")
+                        for _ in 0..<15 {
+                            let device = UIDevice.current
+                            log.add("battery level=\(Int(device.batteryLevel * 100))% state=\(device.batteryState.rawValue) thermal=\(ProcessInfo.processInfo.thermalState.rawValue) camera=\(cameraOn ? "on" : "off")")
+                            try? await Task.sleep(for: .seconds(60))
+                        }
+                    }
+                    camera.stop()
+                    log.add("battery test done")
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
             if args.contains("-toggleCameraAccessory") {
                 Task {
                     try? await Task.sleep(for: .seconds(5))
