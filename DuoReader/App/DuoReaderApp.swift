@@ -4,21 +4,28 @@ import SwiftUI
 @main
 struct DuoReaderApp: App {
     private let container: ModelContainer
+    @State private var importController: ImportController
 
     init() {
+        let container: ModelContainer
         do {
             container = try LibraryStore.makeContainer()
         } catch {
-            // A store that can't open is unrecoverable at this stage. Recovery
-            // (move the broken store aside and start fresh) is tracked under
-            // the privacy and data epic.
+            // Recovery (move the broken store aside and start fresh) is #73.
             fatalError("Could not open the library: \(error)")
         }
+        self.container = container
+        _importController = State(initialValue: ImportController(container: container))
     }
 
     var body: some Scene {
         WindowGroup {
             LibraryView()
+                .environment(importController)
+                // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
+                .onOpenURL { url in
+                    importController.importFiles([url])
+                }
         }
         .modelContainer(container)
     }
