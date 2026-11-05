@@ -77,9 +77,6 @@ final class ReaderModel {
             barBottom: titleBarBottom,
             compactHeight: view.traitCollection.verticalSizeClass == .compact
         )
-        #if DEBUG
-        print("DuoReader page insets: window top \(safe.top), bar \(titleBarBottom) -> top \(insets.top), bottom \(insets.bottom)")
-        #endif
         return UIEdgeInsets(top: insets.top, left: safe.left, bottom: insets.bottom, right: safe.right)
     }
 
