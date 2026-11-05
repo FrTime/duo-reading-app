@@ -187,14 +187,14 @@ final class ReaderModel {
         ReadiumPreferences.epub(
             settings,
             systemIsDark: systemIsDark,
-            columns: (layout?.columns ?? 1) == 2 ? .two : .one,
-            spread: (layout?.columns ?? 1) == 2 ? .always : .never,
+            columns: ReadiumPreferences.columnCount(pages: layout?.columns ?? 1),
+            spread: ReadiumPreferences.spread(pages: layout?.columns ?? 1),
             extraMargin: layout?.extraMarginFactor(gutter: Self.pageGutter) ?? 0
         )
     }
 
     private var pdfPreferences: PDFPreferences {
-        ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: (layout?.columns ?? 1) == 2 ? .always : .never)
+        ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: ReadiumPreferences.spread(pages: layout?.columns ?? 1))
     }
 
     /// Saves and applies settings shortly after the last change, so dragging

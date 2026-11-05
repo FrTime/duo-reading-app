@@ -64,6 +64,18 @@ enum ReadiumPreferences {
         )
     }
 
+    /// Readium's column count for reflowable books, from the pages the
+    /// layout shows side by side.
+    static func columnCount(pages: Int) -> ColumnCount {
+        pages == 2 ? .two : .one
+    }
+
+    /// Readium's spread for PDFs and fixed-layout books, from the pages the
+    /// layout shows side by side.
+    static func spread(pages: Int) -> Spread {
+        pages == 2 ? .always : .never
+    }
+
     /// Readium's own theme drives image filters and its fallback colours. The
     /// dark theme is the only one that applies image filters.
     private static func readiumTheme(for theme: ReaderTheme, palette: ReaderPalette) -> Theme {
