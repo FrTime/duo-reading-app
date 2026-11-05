@@ -77,6 +77,9 @@ final class ReaderModel {
             barBottom: titleBarBottom,
             compactHeight: view.traitCollection.verticalSizeClass == .compact
         )
+        #if DEBUG
+        print("DuoReader page insets: window top \(safe.top), bar \(titleBarBottom) -> top \(insets.top), bottom \(insets.bottom)")
+        #endif
         return UIEdgeInsets(top: insets.top, left: safe.left, bottom: insets.bottom, right: safe.right)
     }
 
@@ -185,6 +188,16 @@ final class ReaderModel {
         delegateBridge = bridge
         book.lastOpened = .now
         state = .ready
+        #if DEBUG
+        // `-DuoReaderHideChrome` hides the bars soon after opening, for
+        // screenshots on simulators where taps don't get through.
+        if ProcessInfo.processInfo.arguments.contains("-DuoReaderHideChrome") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                self?.isChromeVisible = false
+            }
+        }
+        #endif
 
         // Publication isn't Sendable; Readium computes positions off the main
         // actor and the navigator only reads the publication meanwhile.

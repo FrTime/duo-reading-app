@@ -26,15 +26,6 @@ struct ReaderView: View {
     var body: some View {
         NavigationStack {
             content
-                // Pages start below the title bar (see PageInsets), so measure
-                // where it ends. Only while it shows: hiding it mustn't reflow.
-                // It shows while the book opens, so this is known before the
-                // first page is laid out.
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
-                } action: { barBottom in
-                    if chromeVisibility == .visible { model.titleBarBottom = barBottom }
-                }
                 // The scrubber is a bar of its own, not a toolbar item: on the
                 // Duo the system can fold toolbars into the side rail, where
                 // a slider gets squeezed and its drag lost.
@@ -45,6 +36,16 @@ struct ReaderView: View {
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity)
                             .background(pageColor)
+                            // The bar covers the page's last lines (keeping
+                            // them clear would cost lines on every page), so
+                            // fade them out rather than slicing one in half.
+                            .background(alignment: .top) {
+                                LinearGradient(colors: [pageColor.opacity(0), pageColor], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: 24)
+                                    .offset(y: -24)
+                                    .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
+                            }
                             .transition(.opacity)
                     }
                 }
@@ -160,6 +161,11 @@ struct ReaderView: View {
         case .loading:
             ProgressView("Opening \(model.book.title)…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The bar shows while the book opens, so where it ends is
+                // known before the first page is laid out (see PageInsets).
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                    model.titleBarBottom = $0
+                }
                 .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
         case .failed(let error):
             ContentUnavailableView {
@@ -302,6 +308,11 @@ private struct ReaderSurface: View {
                 surface(in: full, insets: insets)
                     .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
                         railInsets = new
+                    }
+                    // Pages start below the title bar. Measured only while it
+                    // shows, so hiding it doesn't reflow the page.
+                    .onChange(of: safe.frame(in: .global).minY, initial: true) { _, barBottom in
+                        if model.isChromeVisible { model.titleBarBottom = barBottom }
                     }
             }
             .ignoresSafeArea(.container)
