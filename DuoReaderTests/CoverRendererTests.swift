@@ -114,3 +114,48 @@ struct ColorSamplerTests {
         #expect(palette.accent != palette.base)
     }
 }
+
+/// Writes one sample of every template to the simulator's temp folder
+/// (`tmp/CoverSamples`), for eyeballing changes to the renderer.
+struct CoverSampleRenders {
+    @Test func writesSamplesOfEveryTemplate() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "CoverSamples", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let art = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 600), format: format).image { context in
+            UIColor(red: 0.1, green: 0.3, blue: 0.5, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 400, height: 600))
+            UIColor(red: 0.95, green: 0.6, blue: 0.2, alpha: 1).setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 80, y: 120, width: 240, height: 240))
+        }
+        var seed = CoverFixtures.seed(
+            title: "The Long Way to a Small, Angry Planet",
+            authors: ["Ada Writer"],
+            summary: String(repeating: "A crew of misfits tunnels through space and finds a home in each other. ", count: 4)
+        )
+        seed.series = "Wayfarers"
+        seed.seriesIndex = 1
+        let renderer = CoverRenderer(frontWidth: 600)
+        for template in CoverTemplate.allCases {
+            for withImage in [true, false] {
+                let palette = withImage ? (art.cgImage.flatMap(ColorSampler.palette) ?? .generated(for: seed.title)) : .generated(for: seed.title)
+                let design = template.makeDesign(seed: seed, palette: palette, imageSource: withImage ? .embedded : .none)
+                let rendered = renderer.render(design: design, image: withImage ? art : nil)
+                // Front, spine and back side by side, as the jacket unfolds.
+                let size = CGSize(
+                    width: rendered.back.size.width + rendered.spine.size.width + rendered.front.size.width,
+                    height: rendered.front.size.height
+                )
+                let sheet = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                    rendered.back.draw(at: .zero)
+                    rendered.spine.draw(at: CGPoint(x: rendered.back.size.width, y: 0))
+                    rendered.front.draw(at: CGPoint(x: rendered.back.size.width + rendered.spine.size.width, y: 0))
+                }
+                let name = "\(template.rawValue)-\(withImage ? "image" : "text").jpg"
+                try #require(sheet.jpegData(compressionQuality: 0.85)).write(to: folder.appending(path: name))
+            }
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path()).count >= CoverTemplate.allCases.count * 2)
+    }
+}

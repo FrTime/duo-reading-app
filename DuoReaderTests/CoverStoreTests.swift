@@ -158,4 +158,25 @@ struct CoverLibraryTests {
         await library.deleteCovers(for: book.id)
         #expect(library.revision(for: book.id) == 2)
     }
+
+    @Test func rebuildsAutomaticCoversWhenTheBookChanges() async {
+        let root = FileManager.default.temporaryDirectory.appending(path: "CoverLibraryTests-\(UUID().uuidString)")
+        let library = CoverLibrary(store: CoverStore(root: root, renderer: CoverRenderer(frontWidth: 90)))
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .epub, title: "Hello")
+
+        let before = await library.design(for: book)
+        #expect(before.template == .typographic)
+        _ = await library.backgroundColor(for: book)
+
+        book.coverImageData = CoverFixtures.jpeg(color: .green)
+        await library.metadataDidChange(for: book)
+        #expect(library.revision(for: book.id) == 1)
+        let after = await library.design(for: book)
+        #expect(after.template == .classic)
+        #expect(after.baseColor.green > 0.5)
+
+        // Nothing changed this time, so views don't need to redraw.
+        await library.metadataDidChange(for: book)
+        #expect(library.revision(for: book.id) == 1)
+    }
 }

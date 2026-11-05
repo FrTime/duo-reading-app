@@ -20,7 +20,9 @@ final class CoverLibrary {
 
     init(store: CoverStore) {
         self.store = store
-        images.countLimit = 300
+        // Cost is decoded bytes. A full-size front is about 12 MB decoded, a
+        // shelf texture about 1 MB, so cap by memory rather than count.
+        images.totalCostLimit = 96 * 1024 * 1024
     }
 
     /// Goes up by one each time a book's cover changes.
@@ -70,7 +72,7 @@ final class CoverLibrary {
             CoverStore.loadImage(at: url, maxPixels: min(limit, 4096))
         }.value
         let image = loaded ?? Self.placeholder(face, design: design)
-        images.setObject(image, forKey: key)
+        images.setObject(image, forKey: key, cost: Self.decodedBytes(of: image))
         return image
     }
 
@@ -110,6 +112,11 @@ final class CoverLibrary {
 
     private func bump(_ bookID: UUID) {
         revisions[bookID, default: 0] += 1
+    }
+
+    private static func decodedBytes(of image: UIImage) -> Int {
+        guard let cgImage = image.cgImage else { return 1 }
+        return cgImage.bytesPerRow * cgImage.height
     }
 
     /// Drawn on the spot if the rendered file is missing (say the disk was full).
