@@ -136,6 +136,12 @@ struct ImportSummaryTests {
         #expect(s.title.contains("A"))
     }
 
+    @Test func duplicateOnlyMessageDoesNotRepeatTheTitle() {
+        let s = ImportSummary(outcomes: [.duplicate(title: "The Lighthouse Keeper")])
+        #expect(s.title == "Already in your library")
+        #expect(s.message == "The Lighthouse Keeper")
+    }
+
     @Test func failuresAreExplained() {
         let s = ImportSummary(outcomes: [
             .duplicate(title: "B"),

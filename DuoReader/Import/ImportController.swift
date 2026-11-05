@@ -75,6 +75,10 @@ struct ImportSummary: Identifiable, Equatable {
     }
 
     var message: String {
+        // The title already says it; just name the books.
+        if imported.isEmpty && failures.isEmpty {
+            return duplicates.joined(separator: "\n")
+        }
         var lines: [String] = []
         if !imported.isEmpty {
             lines.append(String(localized: "Added: \(imported.count)"))
