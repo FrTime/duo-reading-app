@@ -26,6 +26,15 @@ struct ReaderView: View {
     var body: some View {
         NavigationStack {
             content
+                // Pages start below the title bar (see PageInsets), so measure
+                // where it ends. Only while it shows: hiding it mustn't reflow.
+                // It shows while the book opens, so this is known before the
+                // first page is laid out.
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
+                } action: { barBottom in
+                    if chromeVisibility == .visible { model.titleBarBottom = barBottom }
+                }
                 // The scrubber is a bar of its own, not a toolbar item: on the
                 // Duo the system can fold toolbars into the side rail, where
                 // a slider gets squeezed and its drag lost.
@@ -47,6 +56,9 @@ struct ReaderView: View {
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar)
+                // Always drawn, not only once content scrolls under it, so a
+                // line never shows faded through the bar's material.
+                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
                 .background(pageColor.ignoresSafeArea())
         }
         .sheet(isPresented: $showingContents) {
