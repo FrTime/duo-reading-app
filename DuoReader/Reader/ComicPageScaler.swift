@@ -38,8 +38,9 @@ final class ComicPageScaler {
         retry?.cancel()
         if force { applied.removeAllObjects() }
         retry = Task { [weak self, weak root] in
-            guard let root else { return }
-            await self?.scale(Self.webViews(in: root), to: scale, insets: insets, rightToLeft: rightToLeft)
+            if let root {
+                await self?.scale(Self.webViews(in: root), to: scale, insets: insets, rightToLeft: rightToLeft)
+            }
             for delay in Self.followUpDelays {
                 try? await Task.sleep(for: delay)
                 // Readium adds and removes web views as pages change.
