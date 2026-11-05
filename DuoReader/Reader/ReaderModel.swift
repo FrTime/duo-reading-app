@@ -60,6 +60,26 @@ final class ReaderModel {
         }
     }
 
+    /// Where the reader's title bar ends, from the top of the window, last
+    /// measured while it showed. Reflowable pages start below it. Set by the
+    /// view; Readium reads it whenever it lays out a page.
+    @ObservationIgnored var titleBarBottom: CGFloat = 0
+
+    /// Top and bottom insets for reflowable pages, or nil for Readium's own
+    /// (PDFs and fixed layouts, which fill the screen).
+    func pageInsets(for navigator: VisualNavigator) -> UIEdgeInsets? {
+        guard isReflowable, let view = (navigator as? UIViewController)?.view,
+              let window = view.window else { return nil }
+        let safe = window.safeAreaInsets
+        let insets = PageInsets.resolve(
+            windowTop: safe.top,
+            windowBottom: safe.bottom,
+            barBottom: titleBarBottom,
+            compactHeight: view.traitCollection.verticalSizeClass == .compact
+        )
+        return UIEdgeInsets(top: insets.top, left: safe.left, bottom: insets.bottom, right: safe.right)
+    }
+
     /// Readium's page gutter, fixed so the fold gap can be worked out from it.
     static let pageGutter: CGFloat = 20
 
@@ -165,6 +185,16 @@ final class ReaderModel {
         delegateBridge = bridge
         book.lastOpened = .now
         state = .ready
+        #if DEBUG
+        // `-DuoReaderHideChrome` hides the bars soon after opening, for
+        // screenshots on simulators where taps don't get through.
+        if ProcessInfo.processInfo.arguments.contains("-DuoReaderHideChrome") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                self?.isChromeVisible = false
+            }
+        }
+        #endif
 
         // Publication isn't Sendable; Readium computes positions off the main
         // actor and the navigator only reads the publication meanwhile.
@@ -430,6 +460,10 @@ private final class NavigatorDelegateBridge: EPUBNavigatorDelegate, PDFNavigator
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         model?.locationDidChange(locator)
+    }
+
+    func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+        model?.pageInsets(for: navigator)
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
