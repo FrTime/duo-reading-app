@@ -60,11 +60,8 @@ struct ShelfView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            RealityView { content in
-                content.camera = .virtual
-                content.add(scene.root)
-            }
-            .accessibilityHidden(true)
+            ShelfRenderView(scene: scene, background: UIColor(cgColor: ShelfTextures.wall.darkened(0.45).cgColor))
+                .accessibilityHidden(true)
             .onAppear {
                 fold = Self.verticalFold(in: proxy)
                 resize(to: proxy.size)
@@ -82,7 +79,7 @@ struct ShelfView: View {
         .simultaneousGesture(scrollGesture)
         // VoiceOver reads invisible stand-ins laid over the books. They sit
         // in an overlay, not in `accessibilityChildren` on the container:
-        // that modifier stops the RealityView from ever drawing.
+        // that modifier stops RealityKit from ever drawing.
         .overlay {
             accessibleBooks
                 .allowsHitTesting(false)
