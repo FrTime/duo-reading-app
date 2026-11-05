@@ -34,19 +34,31 @@ struct DuoReaderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(importController)
-                // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
-                .onOpenURL { url in
-                    importController.importFiles([url])
-                }
-                .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
-                    Button("OK") {}
-                } message: {
-                    Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
-                }
+            #if DEBUG
+            if CoverSpike.isRequested {
+                OuterScreenCoverSpikeView()
+            } else {
+                mainContent
+            }
+            #else
+            mainContent
+            #endif
         }
         .modelContainer(container)
+    }
+
+    private var mainContent: some View {
+        RootView()
+            .environment(importController)
+            // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
+            .onOpenURL { url in
+                importController.importFiles([url])
+            }
+            .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
+                Button("OK") {}
+            } message: {
+                Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
+            }
     }
 }
 
