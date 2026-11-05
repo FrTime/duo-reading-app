@@ -238,7 +238,7 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
         if hasAuthor {
             boxes.append(CoverTextBox(
                 face: .back, role: .author, text: seed.authorLine,
-                centerY: 0.88, width: 0.84, height: 0.07,
+                centerY: 0.88, width: 0.8, height: 0.07,
                 font: font, weight: .medium, fontSize: 0.04, color: backText,
                 alignment: backAlign, isUppercased: true, hasShadow: shadow
             ))
