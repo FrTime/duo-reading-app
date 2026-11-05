@@ -73,6 +73,15 @@ final class ReaderModel {
     private(set) var progression: Double?
     /// The chapter title at the current position, when the book has one.
     private(set) var chapterTitle: String?
+    /// The book's contents, flattened with nesting depth.
+    private(set) var tableOfContents: [TOCEntry] = []
+    /// Where the reader was before the last jump (contents, search, scrubber),
+    /// so they can go back to it.
+    private(set) var returnLocator: Locator?
+    /// The current position.
+    private(set) var currentLocator: Locator?
+    /// The contents entry the reader is in.
+    private(set) var currentTOCEntryID: TOCEntry.ID?
     /// "Page 12 of 300" style position, when positions are known.
     private(set) var position: Int?
     private(set) var positionCount: Int?
@@ -160,6 +169,11 @@ final class ReaderModel {
         // Publication isn't Sendable; Readium computes positions off the main
         // actor and the navigator only reads the publication meanwhile.
         nonisolated(unsafe) let positionsSource = publication
+        // Contents first: positions can take seconds in a long book.
+        if let toc = try? await positionsSource.tableOfContents().get() {
+            tableOfContents = TOCEntry.flatten(toc)
+            updateCurrentTOCEntry()
+        }
         positionCount = try? await positionsSource.positions().get().count
     }
 
@@ -170,6 +184,8 @@ final class ReaderModel {
         isClosed = true
         if settingsUpdate != nil { commitSettings() }
         saveThrottle.flush()
+        highlightSearchResult(nil)
+        returnLocator = nil
         navigator = nil
         publication = nil
         delegateBridge = nil
@@ -249,6 +265,12 @@ final class ReaderModel {
     @discardableResult
     func turn(_ turn: PageTurn, animated: Bool) async -> Bool {
         guard let navigator else { return false }
+        highlightSearchResult(nil)
+        // Reading on for a few pages after a jump settles the reader there.
+        if returnLocator != nil {
+            turnsSinceJump += 1
+            if turnsSinceJump >= Self.turnsToSettle { returnLocator = nil }
+        }
         let options = NavigatorGoOptions(animated: animated && !UIAccessibility.isReduceMotionEnabled)
         switch turn {
         case .left: return await navigator.goLeft(options: options)
@@ -266,9 +288,111 @@ final class ReaderModel {
         await turn(.backward, animated: settings.pageTurn == .slide)
     }
 
+    // MARK: - Jumping
+
+    /// Whether the book can be searched (EPUBs can; most PDFs can't).
+    var isSearchable: Bool {
+        publication?.isSearchable ?? false
+    }
+
+    /// Goes to a contents entry, remembering where the reader was.
+    func go(to link: Link) async {
+        guard let navigator else { return }
+        let from = currentLocator
+        highlightSearchResult(nil)
+        if await navigator.go(to: link, options: NavigatorGoOptions(animated: false)) {
+            rememberReturnPoint(from)
+        }
+    }
+
+    /// Goes to a position, e.g. a search result, remembering where the reader was.
+    func go(to locator: Locator) async {
+        guard let navigator else { return }
+        let from = currentLocator
+        highlightSearchResult(nil)
+        if await navigator.go(to: locator, options: NavigatorGoOptions(animated: false)) {
+            rememberReturnPoint(from)
+        }
+    }
+
+    /// Goes to a point through the whole book, from 0 to 1 (the scrubber).
+    /// Returns false if there's nothing there to go to.
+    @discardableResult
+    func go(toProgression progression: Double) async -> Bool {
+        guard let publication, progression.isFinite else { return false }
+        nonisolated(unsafe) let source = publication
+        guard let locator = await source.locate(progression: min(max(progression, 0), 1)) else { return false }
+        await go(to: locator)
+        return true
+    }
+
+    /// Returns to where the reader was before the first of their recent jumps.
+    func goBackToReturnPoint() async {
+        guard let navigator, let target = returnLocator else { return }
+        returnLocator = nil
+        highlightSearchResult(nil)
+        _ = await navigator.go(to: target, options: NavigatorGoOptions(animated: false))
+    }
+
+    func clearReturnPoint() {
+        returnLocator = nil
+    }
+
+    /// Keeps the place before the first jump, so several jumps in a row
+    /// (scrubbing, trying search results) still lead back to where reading
+    /// was. Turning a page by hand settles the reader and clears it.
+    private func rememberReturnPoint(_ from: Locator?) {
+        turnsSinceJump = 0
+        if returnLocator == nil, let from { returnLocator = from }
+    }
+
+    /// Page turns after a jump before "Back to…" goes away.
+    static let turnsToSettle = 5
+    @ObservationIgnored private var turnsSinceJump = 0
+
+    private func updateCurrentTOCEntry() {
+        guard let publication, let href = currentLocator?.href.string else {
+            currentTOCEntryID = nil
+            return
+        }
+        currentTOCEntryID = TOCEntry.currentID(
+            in: tableOfContents,
+            readingOrder: publication.readingOrder.map { $0.url().string },
+            current: href
+        )
+    }
+
+    // MARK: - Search
+
+    /// Runs a full-text search, returning up to `limit` matches.
+    func search(_ query: String, limit: Int = 500) async -> [Locator] {
+        guard let publication, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        nonisolated(unsafe) let source = publication
+        guard case let .success(iterator) = await source.search(query: query) else { return [] }
+        nonisolated(unsafe) let pages = iterator
+        defer { pages.close() }
+        var results: [Locator] = []
+        while results.count < limit, !Task.isCancelled {
+            guard case let .success(page?) = await pages.next() else { break }
+            results += page.locators
+        }
+        return Task.isCancelled ? [] : Array(results.prefix(limit))
+    }
+
+    /// Underlines a search match on the page, or clears it with nil.
+    func highlightSearchResult(_ locator: Locator?) {
+        guard let decorator = navigator as? DecorableNavigator else { return }
+        let decorations = locator.map {
+            [Decoration(id: "search-result", locator: $0, style: .underline(tint: .systemOrange, isActive: true))]
+        } ?? []
+        decorator.apply(decorations: decorations, in: "search")
+    }
+
     // MARK: - Position
 
     func locationDidChange(_ locator: Locator) {
+        currentLocator = locator
+        updateCurrentTOCEntry()
         progression = locator.locations.totalProgression ?? progression
         chapterTitle = locator.title
         position = locator.locations.position

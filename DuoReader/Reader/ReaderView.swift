@@ -16,6 +16,8 @@ struct ReaderView: View {
     @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
     @State private var hinge: OuterCoverPolicy.Hinge = .none
     @State private var outerCoverCamera = OuterCoverCamera.shared
+    @State private var showingContents = false
+    @State private var showingSearch = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -24,6 +26,13 @@ struct ReaderView: View {
     var body: some View {
         NavigationStack {
             content
+                // Bottom trailing, so it stays off the hinge on an open Duo.
+                .overlay(alignment: .bottomTrailing) {
+                    if model.isChromeVisible, model.state == .ready {
+                        ReturnToPlaceButton(model: model)
+                            .padding([.bottom, .trailing], 12)
+                    }
+                }
                 .navigationTitle(model.book.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
@@ -34,6 +43,14 @@ struct ReaderView: View {
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
+        }
+        .sheet(isPresented: $showingContents) {
+            ReaderContentsView(model: model)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingSearch) {
+            ReaderSearchView(model: model)
+                .presentationDetents([.large])
         }
         // On a wide screen (an open Duo) settings dock at the side so the page
         // stays visible and live; at compact width the inspector shows as a
@@ -138,6 +155,10 @@ struct ReaderView: View {
             }
         case .ready:
             ReaderSurface(model: model) { showingSettings = true }
+                // Edge to edge: Readium insets the page for the top and bottom
+                // safe areas itself, and the layout keeps the page clear of
+                // the side rail while centring a spread on the hinge.
+                .ignoresSafeArea(.container)
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -169,13 +190,29 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready)
         }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                // One panel at a time: settings may be open as a sheet.
+                showingSettings = false
+                showingContents = true
+            } label: {
+                Label("Contents", systemImage: "list.bullet")
+            }
+            .disabled(model.state != .ready)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                model.highlightSearchResult(nil)
+                showingSettings = false
+                showingSearch = true
+            } label: {
+                Label("Search", systemImage: "magnifyingglass")
+            }
+            .disabled(model.state != .ready || !model.isSearchable)
+        }
         ToolbarItem(placement: .bottomBar) {
-            ReaderProgressLabel(
-                progression: model.progression,
-                chapterTitle: model.chapterTitle,
-                position: model.position,
-                positionCount: model.positionCount
-            )
+            ReaderScrubber(model: model)
+                .disabled(model.state != .ready)
         }
     }
 }
@@ -198,8 +235,6 @@ struct ReaderProgressLabel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-                // Bars propose a narrow width; show the whole line.
-                .fixedSize()
         }
         .accessibilityElement(children: .combine)
     }
@@ -225,33 +260,22 @@ enum ReaderProgressText {
 private struct ReaderSurface: View {
     let model: ReaderModel
     let showSettings: () -> Void
-    /// The side space to keep clear, as the difference between the safe frame
-    /// and the edge-to-edge frame. (A view that ignores the safe area reports
-    /// zero insets, so they're measured this way.) Global coordinates are
-    /// physical left to right, as the Duo's panels are.
-    private static func sideInsets(safe: CGRect, full: CGRect) -> ReaderLayout.SideInsets {
-        ReaderLayout.SideInsets(left: max(0, safe.minX - full.minX), right: max(0, full.maxX - safe.maxX))
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    /// The layout works in physical left and right, the way the Duo's panels are.
+    private func sideInsets(_ insets: EdgeInsets) -> ReaderLayout.SideInsets {
+        layoutDirection == .rightToLeft
+            ? ReaderLayout.SideInsets(left: insets.trailing, right: insets.leading)
+            : ReaderLayout.SideInsets(left: insets.leading, right: insets.trailing)
     }
 
     var body: some View {
-        GeometryReader { safe in
-            // Edge to edge: Readium insets the page for the top and bottom
-            // safe areas itself, and the layout keeps the page clear of the
-            // side rail while centring a spread on the hinge.
-            GeometryReader { full in
-                surface(in: full, insets: Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global)))
-            }
-            .ignoresSafeArea(.container)
-        }
-    }
-
-    private func surface(in proxy: GeometryProxy, insets: ReaderLayout.SideInsets) -> some View {
-        Group {
+        GeometryReader { proxy in
             let fold = proxy.reservedRegions(kind: .division).first?.frame
             let layout = ReaderLayout.resolve(
                 size: proxy.size,
                 fold: fold,
-                insets: insets,
+                insets: sideInsets(proxy.safeAreaInsets),
                 spread: model.settings.spread,
                 flow: model.settings.flow
             )
