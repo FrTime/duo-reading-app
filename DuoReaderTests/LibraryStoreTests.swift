@@ -36,3 +36,32 @@ struct LibraryStoreTests {
         #expect(!book.displayAuthors.isEmpty)
     }
 }
+
+@MainActor
+struct BookApplyMetadataTests {
+    @Test func appliesMetadataAndKeepsAO3() throws {
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .epub, title: "")
+        container.mainContext.insert(book)
+        var m = BookMetadata()
+        m.title = "Title"
+        m.authors = ["A"]
+        var ao3 = AO3Metadata()
+        ao3.fandoms = ["F"]
+        m.ao3 = ao3
+        m.coverImageData = Data([1, 2, 3])
+        book.apply(m, fileURL: URL(fileURLWithPath: "/tmp/file.epub"))
+        try container.mainContext.save()
+
+        let fetched = try #require(try container.mainContext.fetch(FetchDescriptor<Book>()).first)
+        #expect(fetched.title == "Title")
+        #expect(fetched.ao3?.fandoms == ["F"])
+        #expect(fetched.coverImageData == Data([1, 2, 3]))
+    }
+
+    @Test func fallsBackToFileNameForTitle() {
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .pdf, title: "")
+        book.apply(BookMetadata(), fileURL: URL(fileURLWithPath: "/tmp/My_Great_Book.pdf"))
+        #expect(book.title == "My Great Book")
+    }
+}
