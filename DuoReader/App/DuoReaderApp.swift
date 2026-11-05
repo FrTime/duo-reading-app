@@ -34,15 +34,7 @@ struct DuoReaderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            #if DEBUG
-            if CoverSpike.isRequested {
-                OuterScreenCoverSpikeView()
-            } else {
-                mainContent
-            }
-            #else
             mainContent
-            #endif
         }
         .modelContainer(container)
     }
@@ -74,6 +66,8 @@ private struct RootView: View {
             .fullScreenCover(item: $openBook) { book in
                 ReaderView(book: book)
             }
+            // The open book's cover on iPhone Duo's outer screen.
+            .modifier(OuterCoverAccessory(book: openBook))
             #if DEBUG
             // `-DuoReaderOpenFirstBook` opens the first book at launch, so the
             // reader can be screenshotted on a simulator without tapping.

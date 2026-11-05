@@ -336,6 +336,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/DuoReader-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Duo Reader uses the camera only to show your book's cover on the outside screen while you read. Nothing is recorded or saved.";
 				INFOPLIST_KEY_CFBundleDisplayName = "Duo Reader";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;

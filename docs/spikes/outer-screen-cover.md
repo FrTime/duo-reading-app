@@ -24,6 +24,8 @@ a session running so the cover stays on the outer screen.
 | --- | --- |
 | Fully open, accessory registered, **no** capture session | `available` stays `false`; nothing on the outer screen. The camera requirement is enforced on hardware. |
 | Fully open, front camera running (`.low` preset, 1 fps, no outputs) | `available=true` about 2 s after launch; the accessory scene connects and the cover fills the outer screen. The camera-in-use dot shows on the outer screen too. |
+| Session running, **no preview layer** in the window | Outer screen stays dark: iOS wants a preview of the session on screen. |
+| Session running, preview 1 pt and opacity 0 | Cover shows. Nothing visible in the reader; only the system camera indicator. This is what ships. |
 | Battery cost | Not measured yet; tracked in #94 for before release. |
 
 ![Outer screen of a real iPhone Duo showing the prototype cover](images/outer-cover-open-device.png)
@@ -54,8 +56,8 @@ a session running so the cover stays on the outer screen.
 1. **Camera-backed cover (recommended, opt-in).** A "Show cover on the outside"
    setting. Turning it on asks for camera permission once, then the reader
    runs a minimal session while open: front camera, `.low` preset, lowest
-   frame rate, no outputs (no frames ever reach the app), and a small visible
-   preview in the reader chrome. Costs: the camera indicator dot shows, some
+   frame rate, no outputs (no frames ever reach the app), and an invisible
+   1 pt preview layer. Costs: the camera indicator dot shows, some
    battery, and App Review risk because Apple calls camera cases the "only
    supported and intended" use (FB25262170). Precedent: Actually Read shipped
    it.
@@ -68,9 +70,11 @@ a session running so the cover stays on the outer screen.
 
 ## Implementation notes for the real feature
 
-- Attach `.sceneAccessory { CameraCaptureAccessory(isEnabled:) { … } }` to the
-  reader view only. The system presents the top-most registration, so only one
-  screen should register.
+- Register `.sceneAccessory { CameraCaptureAccessory(isEnabled:) { … } }` on
+  the window's root view. A registration inside a `fullScreenCover` (where the
+  reader lives) never reaches the scene: nothing connects. Enable it only
+  while a book is open. The system presents the top-most registration, so
+  register it once.
 - Observe `onAvailabilityChange`; the system withdraws the content when the
   device closes, the app backgrounds, or capture stops. The app must work
   fully without it.
