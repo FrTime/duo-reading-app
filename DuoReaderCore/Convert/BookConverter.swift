@@ -23,6 +23,7 @@ public enum BookConverters {
         case .txt: PlainTextConverter()
         case .markdown: MarkdownConverter()
         case .rtf: RTFConverter()
+        case .html: HTMLConverter()
         default: nil
         }
     }
