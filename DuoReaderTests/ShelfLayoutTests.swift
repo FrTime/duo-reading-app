@@ -141,6 +141,6 @@ struct ShelfCameraTests {
         #expect(range.lowerBound == range.upperBound)
         let tall = ShelfCamera.scrollRange(top: 0.3, bottom: -3, halfHeight: 0.6)
         #expect(tall.lowerBound < tall.upperBound)
-        #expect(tall.upperBound == 0.3 + 0.03 - 0.6)
+        #expect(abs(tall.upperBound - (0.3 + 0.03 - 0.6)) < 1e-5)
     }
 }
