@@ -67,7 +67,12 @@ public actor LibraryImporter {
             if Self.isInboxCopy(url) { try? FileManager.default.removeItem(at: url) }
         }
 
-        guard let format = BookFormat(url: url) else {
+        // A plain .zip is looked inside: zipped FictionBook, or a comic.
+        var format = BookFormat(url: url)
+        if format == nil, url.pathExtension.lowercased() == "zip" {
+            format = await ZIPSniffer.bookFormat(ofZIP: url)
+        }
+        guard let format else {
             return .failed(fileName: fileName, reason: .unsupportedFormat)
         }
         // Text formats are converted to EPUB, then read like any other EPUB.
@@ -98,7 +103,11 @@ public actor LibraryImporter {
                 try await converter.convert(url, to: temporary)
             } catch {
                 try? FileManager.default.removeItem(at: temporary)
-                let reason: ImportFailure = (error as? ConversionError) == .tooLarge ? .tooLarge : .unreadable
+                let reason: ImportFailure = switch error as? ConversionError {
+                case .tooLarge?: .tooLarge
+                case .drmProtected?: .drmProtected
+                default: .unreadable
+                }
                 return .failed(fileName: fileName, reason: reason)
             }
             convertedCopy = temporary

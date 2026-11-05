@@ -16,6 +16,8 @@ struct ReaderView: View {
     @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
     @State private var hinge: OuterCoverPolicy.Hinge = .none
     @State private var outerCoverCamera = OuterCoverCamera.shared
+    @State private var showingContents = false
+    @State private var showingSearch = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -24,16 +26,36 @@ struct ReaderView: View {
     var body: some View {
         NavigationStack {
             content
+                // The scrubber is a bar of its own, not a toolbar item: on the
+                // Duo the system can fold toolbars into the side rail, where
+                // a slider gets squeezed and its drag lost.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if showsScrubber {
+                        ReaderScrubber(model: model)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(pageColor)
+                            .transition(.opacity)
+                    }
+                }
                 .navigationTitle(model.book.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .toolbarVisibility(chromeVisibility, for: .navigationBar)
-                .toolbarVisibility(bottomBarVisibility, for: .bottomBar)
-                .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
+                .toolbarColorScheme(pageColorScheme, for: .navigationBar)
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
-                .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
+                .toolbarBackground(pageColor, for: .navigationBar)
                 .background(pageColor.ignoresSafeArea())
+        }
+        .sheet(isPresented: $showingContents) {
+            ReaderContentsView(model: model)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingSearch) {
+            ReaderSearchView(model: model)
+                .presentationDetents([.large])
         }
         // On a wide screen (an open Duo) settings dock at the side so the page
         // stays visible and live; at compact width the inspector shows as a
@@ -114,10 +136,10 @@ struct ReaderView: View {
         model.isChromeVisible || model.state != .ready ? .visible : .hidden
     }
 
-    /// The bottom bar's progress moves into the side panel when the pose
-    /// gives the controls their own space.
-    private var bottomBarVisibility: Visibility {
-        model.layout?.controlsFrame != nil ? .hidden : chromeVisibility
+    /// The scrubber shows with the bars, unless the pose gives the
+    /// controls a panel of their own.
+    private var showsScrubber: Bool {
+        model.isChromeVisible && model.state == .ready && model.layout?.controlsFrame == nil
     }
 
     @ViewBuilder
@@ -169,13 +191,25 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready)
         }
-        ToolbarItem(placement: .bottomBar) {
-            ReaderProgressLabel(
-                progression: model.progression,
-                chapterTitle: model.chapterTitle,
-                position: model.position,
-                positionCount: model.positionCount
-            )
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                // One panel at a time: settings may be open as a sheet.
+                showingSettings = false
+                showingContents = true
+            } label: {
+                Label("Contents", systemImage: "list.bullet")
+            }
+            .disabled(model.state != .ready)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                model.highlightSearchResult(nil)
+                showingSettings = false
+                showingSearch = true
+            } label: {
+                Label("Search", systemImage: "magnifyingglass")
+            }
+            .disabled(model.state != .ready || !model.isSearchable)
         }
     }
 }
@@ -233,16 +267,38 @@ private struct ReaderSurface: View {
         ReaderLayout.SideInsets(left: max(0, safe.minX - full.minX), right: max(0, full.maxX - safe.maxX))
     }
 
+    /// The widest side insets seen at the current size. The rail holds the
+    /// bars, so it comes and goes as the bars show and hide; keeping the
+    /// widest means the page doesn't re-paginate on every tap, and text never
+    /// ends up under the rail when the bars come back.
+    @State private var railInsets: RailInsets?
+
+    struct RailInsets: Equatable {
+        var size: CGSize
+        var insets: ReaderLayout.SideInsets
+    }
+
     var body: some View {
         GeometryReader { safe in
             // Edge to edge: Readium insets the page for the top and bottom
             // safe areas itself, and the layout keeps the page clear of the
             // side rail while centring a spread on the hinge.
             GeometryReader { full in
-                surface(in: full, insets: Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global)))
+                let measured = Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global))
+                let kept = railInsets?.size == full.size ? railInsets?.insets : nil
+                let insets = Self.widest(measured, kept)
+                surface(in: full, insets: insets)
+                    .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
+                        railInsets = new
+                    }
             }
             .ignoresSafeArea(.container)
         }
+    }
+
+    static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {
+        guard let b else { return a }
+        return ReaderLayout.SideInsets(left: max(a.left, b.left), right: max(a.right, b.right))
     }
 
     private func surface(in proxy: GeometryProxy, insets: ReaderLayout.SideInsets) -> some View {
@@ -322,6 +378,7 @@ struct ReaderSidePanel: View {
             .labelStyle(.iconOnly)
             .font(.title2)
             .buttonStyle(.borderless)
+            ReturnToPlaceButton(model: model)
             Spacer(minLength: 0)
         }
         .padding()

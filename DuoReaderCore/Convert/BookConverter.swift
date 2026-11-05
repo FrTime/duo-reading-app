@@ -23,6 +23,8 @@ public enum ConversionError: Error, Equatable {
     case tooLarge
     /// Not text, or not the format its extension says.
     case unreadable
+    /// Encrypted by its store. DRM removal is out of scope.
+    case drmProtected
 }
 
 public enum BookConverters {
@@ -42,6 +44,7 @@ public enum BookConverters {
         case .html: HTMLConverter()
         case .fb2: FB2Converter()
         case .docx: DOCXConverter()
+        case .mobi, .azw3: MOBIConverter()
         default: nil
         }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 import UIKit
 @testable import DuoReader
@@ -178,5 +179,25 @@ struct CoverLibraryTests {
         // Nothing changed this time, so views don't need to redraw.
         await library.metadataDidChange(for: book)
         #expect(library.revision(for: book.id) == 1)
+    }
+
+    @Test func savedBooksAreSeededFromABackgroundContext() async throws {
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let book = Book(relativeFilePath: "x", contentHash: "x", format: .epub, title: "Saved")
+        book.coverImageData = CoverFixtures.jpeg(color: .green)
+        container.mainContext.insert(book)
+        try container.mainContext.save()
+
+        // Built in another context, but from the same stored values.
+        let seed = await CoverLibrary.seed(for: book)
+        #expect(seed == book.coverSeed)
+
+        // Unsaved edits are seen, since the background context can't see them.
+        book.title = "Edited"
+        #expect(await CoverLibrary.seed(for: book).title == "Edited")
+
+        // A book that was never saved still gets a seed.
+        let loose = Book(relativeFilePath: "y", contentHash: "y", format: .epub, title: "Loose")
+        #expect(await CoverLibrary.seed(for: loose).title == "Loose")
     }
 }

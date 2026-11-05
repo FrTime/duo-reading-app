@@ -55,8 +55,12 @@ public enum BookFormat: String, Codable, CaseIterable, Sendable {
         self = match
     }
 
-    /// Picks a format from a URL's path extension.
+    /// Picks a format from a URL's path extension. `name.fb2.zip` is FictionBook.
     public init?(url: URL) {
+        if url.pathExtension.lowercased() == "zip", url.deletingPathExtension().pathExtension.lowercased() == "fb2" {
+            self = .fb2
+            return
+        }
         self.init(fileExtension: url.pathExtension)
     }
 
