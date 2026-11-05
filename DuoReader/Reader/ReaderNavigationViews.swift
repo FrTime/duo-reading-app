@@ -188,17 +188,18 @@ private struct SearchResultRow: View {
 }
 
 /// A slider through the whole book. Moving it previews the percentage;
-/// letting go, or pausing, jumps there.
+/// letting go jumps there.
 struct ReaderScrubber: View {
     let model: ReaderModel
     @State private var draft: Double?
     @State private var pendingJump: Task<Void, Never>?
+    @State private var isDragging = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// VoiceOver swipes up or down move this far through the book.
     static let accessibilityStep = 0.05
-    /// A pause this long while dragging jumps too, so the jump doesn't hang
-    /// on the slider reporting the end of the drag.
+    /// Value changes outside a drag (keyboard, assistive tech) jump after
+    /// this pause.
     static let settleDelay: Duration = .milliseconds(450)
 
     var body: some View {
@@ -206,6 +207,7 @@ struct ReaderScrubber: View {
         HStack(spacing: 12) {
             VStack(spacing: 2) {
                 Slider(value: Binding(get: { value }, set: { setDraft($0) }), in: 0 ... 1) { editing in
+                    isDragging = editing
                     if !editing { jumpToDraft() }
                 }
                 .accessibilityLabel("Position in Book")
@@ -245,6 +247,9 @@ struct ReaderScrubber: View {
     private func setDraft(_ value: Double) {
         draft = value
         pendingJump?.cancel()
+        // While dragging, only letting go jumps: jumping mid-drag would show
+        // "Back" and shorten the track under the finger.
+        guard !isDragging else { return }
         pendingJump = Task {
             try? await Task.sleep(for: Self.settleDelay)
             guard !Task.isCancelled else { return }
