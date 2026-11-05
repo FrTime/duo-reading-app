@@ -104,7 +104,7 @@ public struct CoverRenderer: Sendable {
             context.interpolationQuality = .high
             image.draw(in: rect)
             context.restoreGState()
-        } else {
+        } else if design.template.framesTextFront {
             // A simple double rule so a text-only cover still looks finished.
             let ink = design.template == .clothbound ? design.accentColor : design.baseColor.contrastingText
             let inset = bounds.width * 0.06
@@ -113,6 +113,13 @@ public struct CoverRenderer: Sendable {
             context.stroke(bounds.insetBy(dx: inset, dy: inset))
             context.setLineWidth(max(bounds.width * 0.0015, 1))
             context.stroke(bounds.insetBy(dx: inset * 1.25, dy: inset * 1.25))
+        } else {
+            // Frameless fronts get one short rule in the accent colour.
+            let rule = design.accentColor.contrastRatio(with: design.baseColor) >= 1.8
+                ? design.accentColor
+                : design.baseColor.contrastingText
+            context.setFillColor(rule.cgColor)
+            context.fill(CGRect(x: bounds.width * 0.1, y: bounds.height * 0.53, width: bounds.width * 0.22, height: max(bounds.height * 0.008, 2)))
         }
     }
 
@@ -125,7 +132,7 @@ public struct CoverRenderer: Sendable {
             let width = blurred.size.width * height / max(blurred.size.height, 1)
             context.interpolationQuality = .high
             blurred.draw(in: CGRect(x: 0, y: 0, width: max(width, bounds.width), height: height))
-            context.setFillColor(UIColor.black.withAlphaComponent(0.25).cgColor)
+            context.setFillColor(UIColor.black.withAlphaComponent(0.1).cgColor)
             context.fill(bounds)
         }
         if design.template == .clothbound {
@@ -149,7 +156,7 @@ public struct CoverRenderer: Sendable {
             context.interpolationQuality = .high
             blurred.draw(in: Self.fillRect(imageSize: blurred.size, in: bounds, zoom: 1, offsetX: 0, offsetY: 0))
             context.restoreGState()
-            context.setFillColor(UIColor.black.withAlphaComponent(0.35).cgColor)
+            context.setFillColor(UIColor.black.withAlphaComponent(0.28).cgColor)
             context.fill(bounds)
         }
     }
@@ -224,6 +231,26 @@ public struct CoverRenderer: Sendable {
     static func fittedText(_ text: String, box: CoverTextBox, pointSize: CGFloat, in layout: CGSize) -> NSAttributedString {
         var size = pointSize
         let minimum = pointSize / 3
+        // Spine text reads best on one line: shrink a little to get there
+        // before falling back to wrapping.
+        if box.isVertical {
+            var single = pointSize
+            while single >= pointSize * 0.6 {
+                let line = attributedText(text, box: box, pointSize: single)
+                let width = line.boundingRect(
+                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).width
+                let height = line.boundingRect(
+                    with: CGSize(width: layout.width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).height
+                if width <= layout.width, height <= layout.height { return line }
+                single *= 0.92
+            }
+        }
         var attributed = attributedText(text, box: box, pointSize: size)
         while size > minimum {
             let bounds = attributed.boundingRect(
@@ -255,6 +282,8 @@ public struct CoverRenderer: Sendable {
         case .trailing: .right
         }
         paragraph.lineBreakMode = .byWordWrapping
+        // Avoids one-word last lines on titles.
+        paragraph.lineBreakStrategy = .standard
         paragraph.lineHeightMultiple = box.role == .blurb ? 1.15 : 0.95
         return NSAttributedString(string: text, attributes: [
             .font: font(box.font, weight: box.weight, size: pointSize),

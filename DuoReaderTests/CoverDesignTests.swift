@@ -221,6 +221,20 @@ struct CoverTemplateTests {
         #expect(art.textBoxes(on: .back).allSatisfy { $0.hasShadow })
     }
 
+    @Test func wraparoundNeedsArt() {
+        #expect(!CoverTemplate.wraparound.isAvailable(hasImage: false))
+        #expect(CoverTemplate.wraparound.isAvailable(hasImage: true))
+        #expect(CoverTemplate.allCases.filter { $0.isAvailable(hasImage: false) }.count == CoverTemplate.allCases.count - 1)
+    }
+
+    @Test func minimalTintsItsPaperFromTheArt() {
+        let blue = CoverPalette(base: RGBAColor(red: 0.1, green: 0.3, blue: 0.6), edge: RGBAColor(red: 0.1, green: 0.3, blue: 0.6), accent: .gold)
+        let design = CoverTemplate.minimal.makeDesign(seed: CoverFixtures.seed(), palette: blue, imageSource: .embedded)
+        #expect(design.backColor != .cream)
+        #expect(design.backColor.blue > design.backColor.red)
+        #expect(design.backColor.luminance > 0.6)
+    }
+
     @Test func defaultTemplateDependsOnArtwork() {
         #expect(CoverTemplate.defaultTemplate(hasImage: true) == .classic)
         #expect(CoverTemplate.defaultTemplate(hasImage: false) == .typographic)

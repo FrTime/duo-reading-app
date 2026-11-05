@@ -52,6 +52,19 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
     /// Whether the front shows the cover image under this template.
     public var showsImageOnFront: Bool { self != .typographic }
 
+    /// Wraparound needs art to wrap; without it, it would just be Classic.
+    public func isAvailable(hasImage: Bool) -> Bool {
+        self != .wraparound || hasImage
+    }
+
+    /// Whether the front gets a double-rule frame when it has no image.
+    public var framesTextFront: Bool {
+        switch self {
+        case .classic, .clothbound, .wraparound: true
+        case .minimal, .typographic: false
+        }
+    }
+
     /// The template a new book starts with.
     public static func defaultTemplate(hasImage: Bool) -> CoverTemplate {
         hasImage ? .classic : .typographic
@@ -119,17 +132,19 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
     func colors(for palette: CoverPalette, hasImage: Bool) -> Colors {
         let image = hasImage && showsImageOnFront
         let cloth = palette.base.mixed(with: RGBAColor(red: 0.12, green: 0.1, blue: 0.09), amount: 0.6)
-        return switch self {
+        switch self {
         case .classic:
-            Colors(front: palette.base, spine: palette.edge, back: palette.base, accent: palette.accent)
+            return Colors(front: palette.base, spine: palette.edge, back: palette.base, accent: palette.accent)
         case .wraparound:
-            Colors(front: palette.base, spine: palette.edge, back: palette.base, accent: palette.accent)
+            return Colors(front: palette.base, spine: palette.base, back: palette.base, accent: palette.accent)
         case .clothbound:
-            Colors(front: image ? palette.base : cloth, spine: cloth, back: cloth, accent: .gold)
+            return Colors(front: image ? palette.base : cloth, spine: cloth, back: cloth, accent: .gold)
         case .minimal:
-            Colors(front: image ? palette.base : .cream, spine: .cream, back: .cream, accent: palette.accent)
+            // With art, a pale tint of it; without, plain cream.
+            let paper = image ? palette.base.mixed(with: .cream, amount: 0.82) : .cream
+            return Colors(front: image ? palette.base : .cream, spine: paper, back: paper, accent: palette.accent)
         case .typographic:
-            Colors(front: palette.base, spine: palette.base, back: palette.base, accent: palette.accent)
+            return Colors(front: palette.base, spine: palette.base, back: palette.base, accent: palette.accent)
         }
     }
 
@@ -154,26 +169,29 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
         // Front: only when there's no image to carry the title.
         if !(design.hasImage && showsImageOnFront) {
             let ink = gilt ? RGBAColor.gold : frontColor.contrastingText
-            // Narrower than the face so the title clears the double rule.
+            // Framed fronts centre the title inside the rule; frameless ones
+            // set it large and flush left.
+            let framed = framesTextFront
+            let align: CoverTextAlignment = framed ? .center : .leading
             boxes.append(CoverTextBox(
                 face: .front, role: .title, text: seed.title,
-                centerY: 0.36, width: 0.74, height: 0.36,
-                font: font, weight: .bold, fontSize: 0.12, color: ink,
-                isUppercased: uppercase
+                centerY: framed ? 0.36 : 0.3, width: framed ? 0.76 : 0.8, height: 0.36,
+                font: font, weight: .bold, fontSize: framed ? 0.12 : 0.14, color: ink,
+                alignment: align, isUppercased: uppercase
             ))
             if !seed.authorLine.isEmpty {
                 boxes.append(CoverTextBox(
                     face: .front, role: .author, text: seed.authorLine,
-                    centerY: 0.8, width: 0.74, height: 0.1,
+                    centerY: framed ? 0.8 : 0.86, width: framed ? 0.76 : 0.8, height: 0.1,
                     font: font, weight: .medium, fontSize: 0.055, color: ink,
-                    isUppercased: true
+                    alignment: align, isUppercased: true
                 ))
             }
             if let series = seed.seriesLine {
                 boxes.append(CoverTextBox(
                     face: .front, role: .series, text: series,
-                    centerY: 0.62, width: 0.74, height: 0.07,
-                    font: font, weight: .medium, fontSize: 0.045, color: ink
+                    centerY: framed ? 0.62 : 0.6, width: framed ? 0.76 : 0.8, height: 0.07,
+                    font: font, weight: .medium, fontSize: 0.045, color: ink, alignment: align
                 ))
             }
         }
@@ -183,7 +201,7 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
         let hasAuthor = !seed.authorLine.isEmpty
         // Clothbound spines keep clear of the gilt bands at head and foot.
         let titleSpan = gilt ? (hasAuthor ? 0.12...0.68 : 0.12...0.88) : (hasAuthor ? 0.07...0.73 : 0.08...0.92)
-        let authorSpan = gilt ? 0.72...0.88 : 0.77...0.95
+        let authorSpan = gilt ? 0.71...0.89 : 0.77...0.95
         boxes.append(CoverTextBox(
             face: .spine, role: .title, text: seed.title,
             centerY: (titleSpan.lowerBound + titleSpan.upperBound) / 2, width: 0.8,
