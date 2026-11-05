@@ -87,7 +87,12 @@ struct ReaderSearchView: View {
                         .onSubmit { runSearch() }
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
-                        .onAppear { fieldFocused = true }
+                        .task {
+                            // Focus once the panel has slid in; asking while
+                            // it's still arriving is ignored.
+                            try? await Task.sleep(for: .milliseconds(400))
+                            fieldFocused = true
+                        }
                 }
                 resultsList
             }
