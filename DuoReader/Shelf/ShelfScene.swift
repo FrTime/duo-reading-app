@@ -32,6 +32,7 @@ final class ShelfScene {
     private struct CaseKey: Equatable {
         var rows: Int
         var width: Float
+        var divider: ClosedRange<Float>?
     }
 
     var reduceMotion = false
@@ -263,7 +264,7 @@ final class ShelfScene {
     // MARK: - Bookcase
 
     private func buildCaseIfNeeded(_ layout: ShelfLayout) async {
-        let key = CaseKey(rows: layout.caseRowCount, width: layout.shelfWidth)
+        let key = CaseKey(rows: layout.caseRowCount, width: layout.shelfWidth, divider: layout.divider)
         guard key != caseKey else { return }
         caseKey = key
 
@@ -299,6 +300,17 @@ final class ShelfScene {
             let back = ModelEntity(mesh: .generatePlane(width: width, height: m.rowHeight), materials: [materials.back])
             back.position = SIMD3(0, base + (m.rowHeight - m.boardThickness) / 2, -depth)
             caseRoot.addChild(back)
+        }
+
+        // An upright over the fold, splitting every shelf into two bays.
+        if let divider = layout.divider {
+            let height = layout.contentTop - layout.caseBottom
+            let upright = ModelEntity(
+                mesh: .generateBox(width: divider.upperBound - divider.lowerBound, height: height, depth: depth),
+                materials: [materials.board]
+            )
+            upright.position = SIMD3((divider.lowerBound + divider.upperBound) / 2, (layout.contentTop + layout.caseBottom) / 2, -depth / 2)
+            caseRoot.addChild(upright)
         }
 
         // The case's top and sides.

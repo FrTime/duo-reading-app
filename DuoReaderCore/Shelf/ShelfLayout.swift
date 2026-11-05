@@ -103,42 +103,80 @@ public struct ShelfLayout: Sendable {
     /// enough to fill the screen when there are few books.
     public let caseRowCount: Int
 
+    /// Where an upright divides each shelf into two bays, in scene x, if
+    /// anywhere. On the open Duo it stands over the hinge.
+    public let divider: ClosedRange<Float>?
+
     /// `minimumCaseRows` is how many shelves fill the screen; see
-    /// `ShelfLayout.rowsToFill(height:metrics:)`.
-    public init(books: [ShelfBookSpec], mode: ShelfDisplayMode, shelfWidth: Float, minimumCaseRows: Int = 1, metrics: ShelfMetrics = ShelfMetrics()) {
+    /// `ShelfLayout.rowsToFill(height:metrics:)`. `divider` is the span of
+    /// an upright (the fold); books never stand across it.
+    public init(
+        books: [ShelfBookSpec],
+        mode: ShelfDisplayMode,
+        shelfWidth: Float,
+        minimumCaseRows: Int = 1,
+        divider: ClosedRange<Float>? = nil,
+        metrics: ShelfMetrics = ShelfMetrics()
+    ) {
         self.metrics = metrics
         self.mode = mode
         let width = max(shelfWidth, metrics.bookWidth + 2 * metrics.sideMargin)
         self.shelfWidth = width
-        let usable = width - 2 * metrics.sideMargin
         let left = -width / 2 + metrics.sideMargin
+        let right = width / 2 - metrics.sideMargin
+
+        // The bays books stand in. A divider only splits the case when both
+        // bays can hold a face-out book; otherwise it's ignored.
+        var bays: [ClosedRange<Float>] = [left...right]
+        var usedDivider: ClosedRange<Float>?
+        if let divider {
+            let thick = max(divider.upperBound - divider.lowerBound, metrics.boardThickness)
+            let mid = (divider.lowerBound + divider.upperBound) / 2
+            let span = (mid - thick / 2)...(mid + thick / 2)
+            let leftBay = left...(span.lowerBound - metrics.sideMargin)
+            let rightBay = (span.upperBound + metrics.sideMargin)...right
+            let minimum = metrics.bookWidth * Float(CoverDesign.heightScaleRange.upperBound)
+            if leftBay.upperBound - leftBay.lowerBound >= minimum, rightBay.upperBound - rightBay.lowerBound >= minimum {
+                bays = [leftBay, rightBay]
+                usedDivider = span
+            }
+        }
+        self.divider = usedDivider
+
+        // Face-out books spread evenly across each bay; spines pack tight.
+        let gaps: [Float] = bays.map { bay in
+            switch mode {
+            case .spines:
+                return metrics.bookGap
+            case .covers:
+                let usable = bay.upperBound - bay.lowerBound
+                let perRow = Self.perRow(usable, metrics)
+                return max(metrics.coverGap, (usable - perRow * metrics.bookWidth) / perRow)
+            }
+        }
 
         var slots: [Slot] = []
         slots.reserveCapacity(books.count)
         var row = 0
+        var bay = 0
         var cursor: Float = 0
-        // Face-out books spread evenly across the shelf; spines pack tight.
-        let gap: Float
-        switch mode {
-        case .spines:
-            gap = metrics.bookGap
-        case .covers:
-            let perRow = Self.perRow(usable, metrics)
-            gap = max(metrics.coverGap, (usable - perRow * metrics.bookWidth) / perRow)
-        }
         for (index, book) in books.enumerated() {
             let footprint = metrics.footprint(of: book, mode: mode)
-            if cursor > 0, cursor + footprint > usable + 0.0001 {
-                row += 1
+            while cursor > 0, cursor + footprint > bays[bay].upperBound - bays[bay].lowerBound + 0.0001 {
                 cursor = 0
+                bay += 1
+                if bay == bays.count {
+                    bay = 0
+                    row += 1
+                }
             }
-            let x = left + cursor + footprint / 2
+            let x = bays[bay].lowerBound + cursor + footprint / 2
             slots.append(Slot(
                 id: book.id, index: index, row: row, x: x,
                 baseY: Self.baseY(row: row, metrics: metrics),
                 footprint: footprint, height: metrics.height(of: book)
             ))
-            cursor += footprint + gap
+            cursor += footprint + gaps[bay]
         }
         self.slots = slots
         self.rowCount = books.isEmpty ? 1 : row + 1

@@ -84,7 +84,12 @@ struct CoverEditorView: View {
                         CoverCanvasView(model: model, face: face)
                             .padding(.horizontal, 24)
                     case .threeD:
-                        CoverPreview3DView(rendered: model.rendered, revision: model.renderRevision, thickness: model.design.thickness)
+                        CoverPreview3DView(
+                            rendered: model.rendered,
+                            revision: model.renderRevision,
+                            thickness: model.design.thickness,
+                            heightScale: model.design.sizeScale(for: model.book.id)
+                        )
                     }
                 }
             }

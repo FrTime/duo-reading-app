@@ -87,7 +87,7 @@ struct LibraryView: View {
         } message: { _ in
             Text("The book, its file and its highlights will be removed from this iPhone.")
         }
-        .sheet(item: $editingBook) { book in
+        .fullScreenCover(item: $editingBook) { book in
             CoverEditorView(book: book)
         }
         .alert("Couldn't delete the book", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {

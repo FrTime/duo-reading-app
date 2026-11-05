@@ -21,6 +21,9 @@ struct ShelfView: View {
 
     @State private var scene = ShelfScene()
     @State private var viewSize: CGSize = .zero
+    /// The hinge of the open Duo, in this view's points, when it runs top to
+    /// bottom. An upright stands over it so no book straddles the fold.
+    @State private var fold: CGRect?
     @State private var centerY: Float = 0
     @State private var scrollStart: Float?
     @State private var sizes: [UUID: BookSize] = [:]
@@ -50,6 +53,7 @@ struct ShelfView: View {
         var selected: UUID?
         var held: Held?
         var size: CGSize
+        var fold: CGRect?
     }
 
     var body: some View {
@@ -59,8 +63,15 @@ struct ShelfView: View {
                 content.add(scene.root)
             }
             .accessibilityHidden(true)
-            .onAppear { resize(to: proxy.size) }
-            .onChange(of: proxy.size) { _, size in resize(to: size) }
+            .onAppear {
+                fold = Self.verticalFold(in: proxy)
+                resize(to: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in
+                fold = Self.verticalFold(in: proxy)
+                resize(to: size)
+            }
+            .onChange(of: Self.verticalFold(in: proxy)) { _, new in fold = new }
         }
         .background { Color(cgColor: ShelfTextures.wall.darkened(0.45).cgColor).ignoresSafeArea() }
         .contentShape(Rectangle())
@@ -154,7 +165,8 @@ struct ShelfView: View {
             mode: mode,
             selected: selectedID,
             held: held,
-            size: viewSize
+            size: viewSize,
+            fold: fold
         )
     }
 
@@ -176,8 +188,24 @@ struct ShelfView: View {
             books: ids.map(spec),
             mode: mode,
             shelfWidth: camera.shelfWidth,
-            minimumCaseRows: ShelfLayout.rowsToFill(height: camera.halfHeight * 2)
+            minimumCaseRows: ShelfLayout.rowsToFill(height: camera.halfHeight * 2),
+            divider: dividerSpan
         )
+    }
+
+    /// The fold, in scene x along the front of the shelves.
+    private var dividerSpan: ClosedRange<Float>? {
+        guard let fold else { return nil }
+        let left = camera.scenePoint(for: CGPoint(x: fold.minX, y: fold.midY), atZ: 0).x
+        let right = camera.scenePoint(for: CGPoint(x: fold.maxX, y: fold.midY), atZ: 0).x
+        return min(left, right)...max(left, right)
+    }
+
+    static func verticalFold(in proxy: GeometryProxy) -> CGRect? {
+        guard let frame = proxy.reservedRegions(kind: .division).first?.frame,
+              frame.height > frame.width
+        else { return nil }
+        return frame
     }
 
     private var scrollRange: ClosedRange<Float> {

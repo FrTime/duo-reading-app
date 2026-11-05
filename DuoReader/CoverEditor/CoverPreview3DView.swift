@@ -7,10 +7,13 @@ struct CoverPreview3DView: View {
     /// Changes whenever `rendered` does, so textures reload.
     let revision: Int
     let thickness: Double
+    /// The book's size on the shelf (`CoverDesign.sizeScale`).
+    var heightScale: Double = 1
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var scene = BookPreviewScene()
-    @State private var yaw: Float = -0.55
+    /// Turned to show the spine, the side most people design last.
+    @State private var yaw: Float = 0.55
     @State private var pitch: Float = 0.12
     @State private var dragStart: (yaw: Float, pitch: Float)?
 
@@ -30,9 +33,9 @@ struct CoverPreview3DView: View {
                 }
                 .onEnded { _ in dragStart = nil }
         )
-        .task(id: TextureKey(revision: revision, thickness: thickness)) {
+        .task(id: TextureKey(revision: revision, thickness: thickness, heightScale: heightScale)) {
             guard let rendered else { return }
-            await scene.show(rendered, thickness: thickness)
+            await scene.show(rendered, thickness: thickness, heightScale: heightScale)
             scene.setRotation(yaw: yaw, pitch: pitch, animated: false)
         }
         .accessibilityElement()
@@ -51,6 +54,7 @@ struct CoverPreview3DView: View {
     private struct TextureKey: Equatable {
         var revision: Int
         var thickness: Double
+        var heightScale: Double
     }
 }
 
@@ -65,9 +69,9 @@ final class BookPreviewScene {
     init() {
         let camera = PerspectiveCamera()
         camera.camera.fieldOfViewInDegrees = 30
-        camera.position = SIMD3(0, 0, 0.62)
+        camera.position = SIMD3(0, 0, 0.72)
         root.addChild(camera)
-        ShelfScene.addLights(to: camera, lookingAt: 0.62)
+        ShelfScene.addLights(to: camera, lookingAt: 0.72)
         root.addChild(pivot)
         // A soft backdrop, so the view never shows an empty void.
         let backdrop = ModelEntity(
@@ -78,14 +82,15 @@ final class BookPreviewScene {
         root.addChild(backdrop)
     }
 
-    func show(_ rendered: RenderedCover, thickness: Double) async {
+    func show(_ rendered: RenderedCover, thickness: Double, heightScale: Double) async {
         let front = await ShelfTextures.material(from: rendered.front.cgImage, fallback: .cream)
         let spine = await ShelfTextures.material(from: rendered.spine.cgImage, fallback: .cream)
         let back = await ShelfTextures.material(from: rendered.back.cgImage, fallback: .cream)
+        let spec = ShelfBookSpec(id: UUID(), thickness: thickness, heightScale: heightScale)
         let mesh = MeshResource.generateBox(
-            width: metrics.bookWidth,
-            height: metrics.bookHeight,
-            depth: metrics.depth(of: ShelfBookSpec(id: UUID(), thickness: thickness)),
+            width: metrics.width(of: spec),
+            height: metrics.height(of: spec),
+            depth: metrics.depth(of: spec),
             splitFaces: true
         )
         let materials = ShelfScene.materials(front: front, spine: spine, back: back)

@@ -45,7 +45,9 @@ struct CoverImagePanel: View {
                 PasteButton(supportedContentTypes: [.image]) { providers in
                     paste(providers)
                 }
-                .labelStyle(.iconOnly)
+                .labelStyle(.titleAndIcon)
+                .buttonBorderShape(.roundedRectangle)
+                .tint(.secondary)
             }
             .buttonStyle(.bordered)
 

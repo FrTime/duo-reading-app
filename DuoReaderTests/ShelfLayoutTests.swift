@@ -75,6 +75,29 @@ struct ShelfLayoutTests {
         #expect(ShelfLayout.rowsToFill(height: 0, metrics: metrics) == 1)
     }
 
+    @Test(arguments: [ShelfDisplayMode.spines, .covers])
+    func noBookStandsAcrossTheFold(mode: ShelfDisplayMode) throws {
+        let fold: ClosedRange<Float> = -0.01...0.01
+        let layout = ShelfLayout(books: books(80), mode: mode, shelfWidth: 1.3, divider: fold)
+        let divider = try #require(layout.divider)
+        #expect(divider.lowerBound <= fold.lowerBound && divider.upperBound >= fold.upperBound)
+        for slot in layout.slots {
+            let left = slot.x - slot.footprint / 2
+            let right = slot.x + slot.footprint / 2
+            #expect(right <= divider.lowerBound || left >= divider.upperBound)
+        }
+        // Both bays are used on the first shelf, left one first.
+        let firstRow = layout.slots.filter { $0.row == 0 }
+        #expect(firstRow.contains { $0.x < divider.lowerBound })
+        #expect(firstRow.contains { $0.x > divider.upperBound })
+        #expect(firstRow.map(\.x) == firstRow.map(\.x).sorted())
+    }
+
+    @Test func ignoresAFoldWhenABayWouldBeTooNarrow() {
+        let layout = ShelfLayout(books: books(5), mode: .spines, shelfWidth: 0.3, divider: 0.1...0.11)
+        #expect(layout.divider == nil)
+    }
+
     @Test func thickerBooksTakeMoreRoom() {
         let thin = ShelfBookSpec(id: UUID(), thickness: 0.05)
         let thick = ShelfBookSpec(id: UUID(), thickness: 0.3)
