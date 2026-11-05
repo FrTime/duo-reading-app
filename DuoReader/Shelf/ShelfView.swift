@@ -73,10 +73,17 @@ struct ShelfView: View {
             .onChange(of: Self.verticalFold(in: proxy)) { _, new in fold = new }
         }
         .background { Color(cgColor: ShelfTextures.background.cgColor).ignoresSafeArea() }
-        .contentShape(Rectangle())
-        .onTapGesture(coordinateSpace: .local) { location in tap(at: location) }
-        .gesture(LongPressDragGesture { phase, location in longPress(phase, at: location) })
-        .simultaneousGesture(scrollGesture)
+        // Touches land on a plain SwiftUI layer over the 3D view. The UIKit
+        // view RealityKit draws into would otherwise take them first, and
+        // taps and drags on the books never arrived.
+        .overlay {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(coordinateSpace: .local) { location in tap(at: location) }
+                .gesture(LongPressDragGesture { phase, location in longPress(phase, at: location) })
+                .simultaneousGesture(scrollGesture)
+                .accessibilityHidden(true)
+        }
         // VoiceOver reads invisible stand-ins laid over the books. They sit
         // in an overlay, not in `accessibilityChildren` on the container:
         // that modifier stops RealityKit from ever drawing.
