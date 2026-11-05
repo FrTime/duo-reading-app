@@ -36,14 +36,34 @@ final class ImportController {
         }
     }
 
-    /// Shows a batch's summary. If an earlier summary is still on screen
-    /// (say two files were opened in a row), the two are combined into one
-    /// alert, so no result is lost behind the first.
+    /// Results that arrived while an alert was on screen. SwiftUI doesn't
+    /// redraw an alert that's already presented, so they wait for it to close.
+    private(set) var queued: [ImportOutcome] = []
+
+    /// How long to wait after an alert closes before presenting the next.
+    var representDelay: Duration = .milliseconds(400)
+
+    /// Shows a batch's summary. If an alert is already up (say two files were
+    /// opened in a row), the new results are queued and shown, combined,
+    /// once it's dismissed, so none is lost behind the first.
     func show(_ outcomes: [ImportOutcome]) {
         if let current = summary, !current.isQuietSuccess {
-            summary = ImportSummary(outcomes: current.outcomes + outcomes)
+            queued += outcomes
         } else {
             summary = ImportSummary(outcomes: outcomes)
+        }
+    }
+
+    /// Closes the import alert, then presents anything that arrived meanwhile.
+    func dismissSummary() {
+        summary = nil
+        guard !queued.isEmpty else { return }
+        let next = queued
+        queued = []
+        Task {
+            // Let the dismissal animation finish, or the next alert is dropped.
+            try? await Task.sleep(for: representDelay)
+            show(next)
         }
     }
 }

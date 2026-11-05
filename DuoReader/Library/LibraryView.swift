@@ -63,11 +63,11 @@ struct LibraryView: View {
             importController.summary?.title ?? "",
             isPresented: Binding(
                 get: { importController.summary.map { !$0.isQuietSuccess } ?? false },
-                set: { if !$0 { importController.summary = nil } }
+                set: { if !$0, importController.summary != nil { importController.dismissSummary() } }
             ),
             presenting: importController.summary
         ) { _ in
-            Button("OK") { importController.summary = nil }
+            Button("OK") { importController.dismissSummary() }
         } message: { summary in
             Text(summary.message)
         }

@@ -151,6 +151,23 @@ struct DOCXConverterTests {
         #expect(!parsed.blocks.isEmpty)
     }
 
+    @Test func aBoldOrLargeFirstLineIsTheTitleOfAnUnstyledDocument() {
+        func doc(_ first: String) -> Data {
+            Data("""
+            <w:document xmlns:w="w"><w:body>
+              \(first)
+              <w:p><w:r><w:t>Plain body text.</w:t></w:r></w:p>
+            </w:body></w:document>
+            """.utf8)
+        }
+        let large = #"<w:p><w:r><w:rPr><w:sz w:val="48"/></w:rPr><w:t>Garden Plans</w:t></w:r></w:p>"#
+        #expect(DOCXConverter.blocks(fromDocument: doc(large), styleNames: [:]).styledTitle == "Garden Plans")
+        let bold = #"<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Bold Title</w:t></w:r></w:p>"#
+        #expect(DOCXConverter.blocks(fromDocument: doc(bold), styleNames: [:]).styledTitle == "Bold Title")
+        let plain = #"<w:p><w:r><w:t>Just a sentence.</w:t></w:r></w:p>"#
+        #expect(DOCXConverter.blocks(fromDocument: doc(plain), styleNames: [:]).styledTitle == nil)
+    }
+
     @Test func textBoxesKeepTheSurroundingTextAndAreNotDoubled() async throws {
         let body = """
         <w:document xmlns:w="w" xmlns:mc="mc" xmlns:wps="wps" xmlns:v="v"><w:body>

@@ -172,19 +172,29 @@ struct ImportSummaryTests {
         #expect(mixed.message.contains("Added: 1"))
     }
 
-    @Test func aResultArrivingWhileAnAlertIsUpIsCombinedNotLost() throws {
+    @Test func aResultArrivingWhileAnAlertIsUpIsShownAfterItCloses() async throws {
         let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
                                           booksFolder: Fixtures.temporaryURL("Books"))
+        controller.representDelay = .milliseconds(1)
         controller.show([.failed(fileName: "empty.epub", reason: .unreadable)])
         controller.show([.failed(fileName: "fake.epub", reason: .unreadable)])
-        let summary = try #require(controller.summary)
-        #expect(summary.title == "Couldn’t import 2 files")
-        #expect(summary.message.contains("empty.epub") && summary.message.contains("fake.epub"))
-
-        // Once dismissed, the next batch starts fresh.
-        controller.summary = nil
         controller.show([.failed(fileName: "notes.zip", reason: .unsupportedFormat)])
-        #expect(controller.summary?.title == "Couldn’t import “notes.zip”")
+        // The alert on screen isn't changed under the user.
+        #expect(controller.summary?.title == "Couldn’t import “empty.epub”")
+        #expect(controller.queued.count == 2)
+
+        controller.dismissSummary()
+        #expect(controller.summary == nil)
+        for _ in 0..<200 where controller.summary == nil { try await Task.sleep(for: .milliseconds(5)) }
+        let next = try #require(controller.summary)
+        #expect(next.title == "Couldn’t import 2 files")
+        #expect(next.message.contains("fake.epub") && next.message.contains("notes.zip"))
+        #expect(controller.queued.isEmpty)
+
+        // Dismissing with nothing queued just closes it.
+        controller.dismissSummary()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(controller.summary == nil)
     }
 
     @Test func aQuietSuccessIsNotCarriedIntoTheNextAlert() throws {
