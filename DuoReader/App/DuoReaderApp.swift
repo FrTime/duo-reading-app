@@ -5,21 +5,31 @@ import SwiftUI
 struct DuoReaderApp: App {
     private let container: ModelContainer
     @State private var importController: ImportController
+    @State private var recoveredLibrary: Bool
 
     init() {
-        let container: ModelContainer
+        let opened: LibraryStore.OpenResult
         do {
-            container = try LibraryStore.makeContainer()
+            opened = try LibraryStore.openOrRecover()
         } catch {
-            // Recovery (move the broken store aside and start fresh) is #73.
-            fatalError("Could not open the library: \(error)")
+            // Only reached if even a brand-new store can't be created (disk
+            // full, container unwritable). Nothing useful can run without one.
+            fatalError("Could not create the library: \(error)")
         }
-        self.container = container
+        container = opened.container
+        _recoveredLibrary = State(initialValue: opened.recoveredFrom != nil)
+        _importController = State(initialValue: ImportController(container: opened.container))
+        if opened.recoveredFrom != nil {
+            // Rebuild the shelf after launch, off the main thread.
+            let container = opened.container
+            Task.detached(priority: .userInitiated) {
+                try? await LibraryStore.readopt(into: container)
+            }
+        }
         // Cover designs live outside the store, so remove them with the book.
         LibraryActions.onDelete.append { id in
             Task { await CoverLibrary.shared.deleteCovers(for: id) }
         }
-        _importController = State(initialValue: ImportController(container: container))
     }
 
     var body: some Scene {
@@ -29,6 +39,11 @@ struct DuoReaderApp: App {
                 // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
                 .onOpenURL { url in
                     importController.importFiles([url])
+                }
+                .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
+                    Button("OK") {}
+                } message: {
+                    Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
                 }
         }
         .modelContainer(container)
