@@ -24,7 +24,7 @@ a session running so the cover stays on the outer screen.
 | --- | --- |
 | Fully open, accessory registered, **no** capture session | `available` stays `false`; nothing on the outer screen. The camera requirement is enforced on hardware. |
 | Fully open, front camera running (`.low` preset, 1 fps, no outputs) | `available=true` about 2 s after launch; the accessory scene connects and the cover fills the outer screen. The camera-in-use dot shows on the outer screen too. |
-| Battery cost | A/B test pending (15 min off / 15 min on, twice, unplugged). |
+| Battery cost | Not measured yet; tracked in #94 for before release. |
 
 ![Outer screen of a real iPhone Duo showing the prototype cover](images/outer-cover-open-device.png)
 
@@ -46,7 +46,7 @@ a session running so the cover stays on the outer screen.
 
 ## Not yet verified
 
-- Battery cost of the session on hardware (`-batteryTest` launch flag).
+- Battery cost of the session on hardware (#94, `-batteryTest` launch flag).
 - Whether the accessory survives the half-open pose on hardware.
 
 ## Options
