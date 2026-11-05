@@ -24,7 +24,7 @@ struct DuoReaderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            LibraryView()
+            RootView()
                 .environment(importController)
                 // "Open in Duo Reader" from Files, Mail, Safari and the share sheet.
                 .onOpenURL { url in
@@ -32,5 +32,29 @@ struct DuoReaderApp: App {
                 }
         }
         .modelContainer(container)
+    }
+}
+
+/// The library, with the reader presented over it.
+private struct RootView: View {
+    @State private var openBook: Book?
+    #if DEBUG
+    @Query(sort: \Book.shelfOrder) private var books: [Book]
+    #endif
+
+    var body: some View {
+        LibraryView(onOpen: { openBook = $0 })
+            .fullScreenCover(item: $openBook) { book in
+                ReaderView(book: book)
+            }
+            #if DEBUG
+            // `-DuoReaderOpenFirstBook` opens the first book at launch, so the
+            // reader can be screenshotted on a simulator without tapping.
+            .task {
+                if ProcessInfo.processInfo.arguments.contains("-DuoReaderOpenFirstBook") {
+                    openBook = books.first
+                }
+            }
+            #endif
     }
 }
