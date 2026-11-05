@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import ZIPFoundation
+import ReadiumZIPFoundation
 
 /// Builds small test books on disk so no real (copyrighted) files live in the repo.
 enum Fixtures {
@@ -12,10 +12,10 @@ enum Fixtures {
 
     /// Writes an EPUB with the given files. `mimetype` and `container.xml`
     /// are added unless provided.
-    static func epub(_ files: [String: Data], name: String = "book.epub", opfPath: String = "OEBPS/content.opf") throws -> URL {
+    static func epub(_ files: [String: Data], name: String = "book.epub", opfPath: String = "OEBPS/content.opf") async throws -> URL {
         let url = temporaryURL(name)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let archive = try Archive(url: url, accessMode: .create)
+        let archive = try await Archive(url: url, accessMode: .create)
         var all = files
         if all["mimetype"] == nil { all["mimetype"] = Data("application/epub+zip".utf8) }
         if all["META-INF/container.xml"] == nil {
@@ -30,7 +30,7 @@ enum Fixtures {
         let order = ["mimetype"] + all.keys.filter { $0 != "mimetype" }.sorted()
         for path in order {
             let data = all[path]!
-            try archive.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count),
+            try await archive.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count),
                                  compressionMethod: path == "mimetype" ? .none : .deflate) { position, size in
                 data.subdata(in: Int(position)..<Int(position) + size)
             }

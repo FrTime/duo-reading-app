@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(ImportController.self) private var importController
     @State private var showingPicker = false
     @State private var isDropTargeted = false
+    @State private var openBook: Book?
 
     var body: some View {
         NavigationStack {
@@ -54,6 +55,9 @@ struct LibraryView: View {
             importController.importFiles(files)
             return !files.isEmpty
         } isTargeted: { isDropTargeted = $0 }
+        .fullScreenCover(item: $openBook) { book in
+            ReaderView(book: book)
+        }
         .alert(
             importController.summary?.title ?? "",
             isPresented: Binding(
@@ -84,21 +88,33 @@ struct LibraryView: View {
             }
         } else {
             List(books) { book in
-                VStack(alignment: .leading) {
-                    Text(book.title)
-                        .font(.headline)
-                    Text(book.displayAuthors)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if let fandoms = book.ao3?.fandoms, !fandoms.isEmpty {
-                        Text(fandoms.formatted(.list(type: .and)))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
+                Button {
+                    openBook = book
+                } label: {
+                    row(for: book)
                 }
-                .accessibilityElement(children: .combine)
+                .foregroundStyle(.primary)
+                .accessibilityHint("Opens the book")
             }
         }
+    }
+
+    private func row(for book: Book) -> some View {
+        VStack(alignment: .leading) {
+            Text(book.title)
+                .font(.headline)
+            Text(book.displayAuthors)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let fandoms = book.ao3?.fandoms, !fandoms.isEmpty {
+                Text(fandoms.formatted(.list(type: .and)))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
     }
 }
 
