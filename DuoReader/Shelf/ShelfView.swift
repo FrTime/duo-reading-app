@@ -375,7 +375,7 @@ struct ShelfBookCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                BookCoverView(book: book, pixelWidth: 180)
+                BookCoverView(book: book, maxPixel: 180)
                     .frame(width: 56)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                     .accessibilityHidden(true)
