@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import DuoReader
 
+@MainActor
 struct LibraryImporterTests {
     let container: ModelContainer
     let booksFolder: URL
@@ -14,7 +15,7 @@ struct LibraryImporterTests {
         importer = LibraryImporter(modelContainer: container, booksFolder: booksFolder)
     }
 
-    static func sampleEPUB(title: String = "Imported Book") throws -> URL {
+    nonisolated static func sampleEPUB(title: String = "Imported Book") throws -> URL {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -26,7 +27,6 @@ struct LibraryImporterTests {
         return try Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8)])
     }
 
-    @MainActor
     private func allBooks() throws -> [Book] {
         try container.mainContext.fetch(FetchDescriptor<Book>(sortBy: [SortDescriptor(\.shelfOrder)]))
     }
@@ -40,7 +40,7 @@ struct LibraryImporterTests {
         }
         #expect(title == "Imported Book")
 
-        let books = try await allBooks()
+        let books = try allBooks()
         let book = try #require(books.first)
         #expect(books.count == 1)
         #expect(book.authors == ["Ada Writer"])
@@ -67,13 +67,13 @@ struct LibraryImporterTests {
         let outcomes = await importer.importFiles([source, renamedCopy])
         #expect(outcomes.count == 2)
         #expect(outcomes[1] == .duplicate(title: "Imported Book"))
-        #expect(try await allBooks().count == 1)
+        #expect(try allBooks().count == 1)
     }
 
     @Test func appendsToTheEndOfTheShelf() async throws {
         _ = await importer.importFile(try Self.sampleEPUB(title: "First"))
         _ = await importer.importFile(try Self.sampleEPUB(title: "Second"))
-        let books = try await allBooks()
+        let books = try allBooks()
         #expect(books.map(\.title) == ["First", "Second"])
         #expect(books.map(\.shelfOrder) == [0, 1])
     }
@@ -83,7 +83,7 @@ struct LibraryImporterTests {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("x".utf8).write(to: url)
         #expect(await importer.importFile(url) == .failed(fileName: "notes.mobi", reason: .unsupportedFormat))
-        #expect(try await allBooks().isEmpty)
+        #expect(try allBooks().isEmpty)
     }
 
     @Test func reportsDamagedFilesAndLeavesNoCopy() async throws {
@@ -102,7 +102,7 @@ struct LibraryImporterTests {
         #expect(await importer.importFile(url) == .failed(fileName: "locked.epub", reason: .drmProtected))
     }
 
-    @Test func sha256MatchesKnownValue() throws {
+    @Test nonisolated func sha256MatchesKnownValue() throws {
         let url = Fixtures.temporaryURL("abc.txt")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("abc".utf8).write(to: url)
