@@ -14,6 +14,8 @@ public struct ComicConverter: FileConverter {
     /// A single page bigger than this is not a comic page.
     static let maxPageBytes: Int64 = 60 * 1024 * 1024
     static let maxPages = 5_000
+    /// Far above any real comic; stops a crafted archive filling the disk.
+    static let maxTotalBytes: Int64 = 2 * 1024 * 1024 * 1024
 
     public init() {}
 
@@ -27,7 +29,9 @@ public struct ComicConverter: FileConverter {
         let entries = try await archive.entries()
         let pages = Self.pageEntries(entries)
         guard !pages.isEmpty else { throw ConversionError.unreadable }
-        guard pages.count <= Self.maxPages else { throw ConversionError.tooLarge }
+        guard Self.withinLimits(pageSizes: pages.map { Int64($0.uncompressedSize) }) else {
+            throw ConversionError.tooLarge
+        }
 
         var info = ComicInfo()
         if let entry = entries.first(where: { $0.path.lowercased().hasSuffix("comicinfo.xml") }),
@@ -60,6 +64,13 @@ public struct ComicConverter: FileConverter {
     }
 
     // MARK: - Pages
+
+    /// Page count, each page and the total under their caps.
+    static func withinLimits(pageSizes: [Int64]) -> Bool {
+        pageSizes.count <= maxPages
+            && pageSizes.allSatisfy { $0 <= maxPageBytes }
+            && pageSizes.reduce(0, +) <= maxTotalBytes
+    }
 
     struct Page {
         let number: Int

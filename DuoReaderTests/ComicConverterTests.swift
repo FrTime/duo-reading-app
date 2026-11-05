@@ -117,6 +117,15 @@ struct ComicConverterTests {
         await #expect(throws: ConversionError.unreadable) { _ = try await convert(notZip) }
     }
 
+    @Test func refusesComicsOverTheLimits() {
+        #expect(ComicConverter.withinLimits(pageSizes: [1_000, 2_000]))
+        #expect(!ComicConverter.withinLimits(pageSizes: [ComicConverter.maxPageBytes + 1]))
+        #expect(!ComicConverter.withinLimits(pageSizes: Array(repeating: 1, count: ComicConverter.maxPages + 1)))
+        let nearlyFull = ComicConverter.maxPageBytes
+        let count = Int(ComicConverter.maxTotalBytes / nearlyFull) + 1
+        #expect(!ComicConverter.withinLimits(pageSizes: Array(repeating: nearlyFull, count: count)))
+    }
+
     @Test func readsImageSizeFromTheHeader() {
         #expect(ComicConverter.pixelSize(of: Self.page10) == CGSize(width: 40, height: 30))
         #expect(ComicConverter.pixelSize(of: Data("x".utf8)) == CGSize(width: 1000, height: 1500))
@@ -142,6 +151,7 @@ struct ComicImportTests {
         let book = try #require(try container.mainContext.fetch(FetchDescriptor<Book>()).first)
         #expect(book.format == .epub)
         #expect(book.coverImageData != nil)
+
         #expect(LibraryImporter.supportedFormats.contains(.cbz))
     }
 }
