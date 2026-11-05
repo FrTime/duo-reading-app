@@ -198,6 +198,29 @@ struct CoverTemplateTests {
         #expect(switched.accentColor == .gold)
     }
 
+    @Test func clothboundSpineTextClearsTheGiltBands() {
+        let design = CoverTemplate.clothbound.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .embedded)
+        for box in design.textBoxes(on: .spine) {
+            #expect(box.centerY - box.height / 2 >= 0.095, "\(box.role) runs into the head bands")
+            #expect(box.centerY + box.height / 2 <= 0.91, "\(box.role) runs into the foot bands")
+        }
+    }
+
+    @Test func backAndSpineFollowTheFront() {
+        let palette = CoverPalette(base: RGBAColor(red: 0.1, green: 0.3, blue: 0.6), edge: RGBAColor(red: 0.1, green: 0.3, blue: 0.6), accent: .gold)
+        let classic = CoverTemplate.classic.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .embedded)
+        #expect(classic.backColor == classic.baseColor)
+        let minimal = CoverTemplate.minimal.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .none)
+        #expect(minimal.baseColor == .cream)
+    }
+
+    @Test func noMuddyShadowsOnFlatColour() {
+        let flat = CoverTemplate.wraparound.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .none)
+        #expect(flat.textBoxes.allSatisfy { !$0.hasShadow })
+        let art = CoverTemplate.wraparound.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .embedded)
+        #expect(art.textBoxes(on: .back).allSatisfy(\.hasShadow))
+    }
+
     @Test func defaultTemplateDependsOnArtwork() {
         #expect(CoverTemplate.defaultTemplate(hasImage: true) == .classic)
         #expect(CoverTemplate.defaultTemplate(hasImage: false) == .typographic)

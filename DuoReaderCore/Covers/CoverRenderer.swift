@@ -1,3 +1,4 @@
+import CoreImage
 import Foundation
 import UIKit
 
@@ -105,9 +106,9 @@ public struct CoverRenderer: Sendable {
             context.restoreGState()
         } else {
             // A simple double rule so a text-only cover still looks finished.
-            let ink = design.baseColor.contrastingText
+            let ink = design.template == .clothbound ? design.accentColor : design.baseColor.contrastingText
             let inset = bounds.width * 0.06
-            context.setStrokeColor(ink.mixed(with: design.baseColor, amount: 0.55).cgColor)
+            context.setStrokeColor(ink.mixed(with: design.baseColor, amount: 0.45).cgColor)
             context.setLineWidth(max(bounds.width * 0.004, 1))
             context.stroke(bounds.insetBy(dx: inset, dy: inset))
             context.setLineWidth(max(bounds.width * 0.0015, 1))
@@ -122,6 +123,7 @@ public struct CoverRenderer: Sendable {
             // Continue the cover's left edge round the spine.
             let height = bounds.height
             let width = blurred.size.width * height / max(blurred.size.height, 1)
+            context.interpolationQuality = .high
             blurred.draw(in: CGRect(x: 0, y: 0, width: max(width, bounds.width), height: height))
             context.setFillColor(UIColor.black.withAlphaComponent(0.25).cgColor)
             context.fill(bounds)
@@ -144,6 +146,7 @@ public struct CoverRenderer: Sendable {
             // Mirror so the colours meet the spine the way they leave the front.
             context.translateBy(x: bounds.width, y: 0)
             context.scaleBy(x: -1, y: 1)
+            context.interpolationQuality = .high
             blurred.draw(in: Self.fillRect(imageSize: blurred.size, in: bounds, zoom: 1, offsetX: 0, offsetY: 0))
             context.restoreGState()
             context.setFillColor(UIColor.black.withAlphaComponent(0.35).cgColor)
@@ -162,16 +165,16 @@ public struct CoverRenderer: Sendable {
         switch face {
         case .front:
             // The hinge runs down the left edge of the front.
-            if let g = gradient([(0, 0.28), (0.035, 0.05), (0.06, 0)]) {
+            if let g = gradient([(0, 0.18), (0.02, 0.04), (0.035, 0)]) {
                 context.drawLinearGradient(g, start: .zero, end: CGPoint(x: bounds.width, y: 0), options: [])
             }
         case .back:
-            if let g = gradient([(0.94, 0), (0.965, 0.05), (1, 0.28)]) {
+            if let g = gradient([(0.965, 0), (0.98, 0.04), (1, 0.18)]) {
                 context.drawLinearGradient(g, start: .zero, end: CGPoint(x: bounds.width, y: 0), options: [])
             }
         case .spine:
             // Rounded spine: darker at both edges, lighter just left of centre.
-            if let g = gradient([(0, 0.35), (0.18, 0.08), (0.4, 0), (0.75, 0.08), (1, 0.32)]) {
+            if let g = gradient([(0, 0.24), (0.15, 0.05), (0.4, 0), (0.8, 0.05), (1, 0.22)]) {
                 context.drawLinearGradient(g, start: .zero, end: CGPoint(x: bounds.width, y: 0), options: [])
             }
         }
@@ -316,16 +319,25 @@ public struct CoverRenderer: Sendable {
         )
     }
 
-    /// A cheap, heavy blur: shrink the image right down, then let it scale back up.
+    /// A heavy, smooth blur of a small copy of the image, for the
+    /// wraparound back and spine.
     static func blurred(_ image: UIImage) -> UIImage? {
         guard image.size.width > 0, image.size.height > 0 else { return nil }
-        let small = CGSize(width: 18, height: max((18 * image.size.height / image.size.width).rounded(), 1))
+        let small = CGSize(width: 160, height: max((160 * image.size.height / image.size.width).rounded(), 1))
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
-        return UIGraphicsImageRenderer(size: small, format: format).image { context in
-            context.cgContext.interpolationQuality = .medium
+        let shrunk = UIGraphicsImageRenderer(size: small, format: format).image { context in
+            context.cgContext.interpolationQuality = .high
             image.draw(in: CGRect(origin: .zero, size: small))
         }
+        guard let cgImage = shrunk.cgImage else { return shrunk }
+        let input = CIImage(cgImage: cgImage)
+        let output = input.clampedToExtent()
+            .applyingGaussianBlur(sigma: 9)
+            .cropped(to: input.extent)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        guard let blurred = context.createCGImage(output, from: input.extent) else { return shrunk }
+        return UIImage(cgImage: blurred)
     }
 }

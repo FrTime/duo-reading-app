@@ -10,19 +10,27 @@ public enum ColorSampler {
         let height = 36
         guard let pixels = rgbaPixels(of: image, width: width, height: height) else { return nil }
 
-        func average(columns: Range<Int>) -> RGBAColor {
-            var r = 0.0, g = 0.0, b = 0.0, n = 0.0
+        /// The average of the most common colour in those columns, so a
+        /// blue cover with an orange sun reads as blue, not grey.
+        func dominant(columns: Range<Int>) -> RGBAColor {
+            var bins = [Int: (r: Double, g: Double, b: Double, n: Int)]()
             for y in 0..<height {
                 for x in columns {
                     let i = (y * width + x) * 4
-                    r += Double(pixels[i]); g += Double(pixels[i + 1]); b += Double(pixels[i + 2]); n += 1
+                    let r = Int(pixels[i]), g = Int(pixels[i + 1]), b = Int(pixels[i + 2])
+                    let key = (r >> 6) << 4 | (g >> 6) << 2 | (b >> 6)
+                    var bin = bins[key] ?? (0, 0, 0, 0)
+                    bin.r += Double(r); bin.g += Double(g); bin.b += Double(b); bin.n += 1
+                    bins[key] = bin
                 }
             }
-            return RGBAColor(red: r / n / 255, green: g / n / 255, blue: b / n / 255)
+            guard let best = bins.values.max(by: { $0.n < $1.n }), best.n > 0 else { return .cream }
+            let n = Double(best.n) * 255
+            return RGBAColor(red: best.r / n, green: best.g / n, blue: best.b / n)
         }
 
-        let base = average(columns: 0..<width)
-        let edge = average(columns: 0..<3)
+        let base = dominant(columns: 0..<width)
+        let edge = dominant(columns: 0..<3)
 
         // Bucket vivid pixels by hue and average the busiest bucket.
         var buckets = [(r: Double, g: Double, b: Double, n: Int)](repeating: (0, 0, 0, 0), count: 12)
