@@ -74,6 +74,9 @@ final class ReaderModel {
     /// Top and bottom insets for reflowable pages, or nil for Readium's own
     /// (PDFs and fixed layouts, which fill the screen).
     func pageInsets(for navigator: VisualNavigator) -> UIEdgeInsets? {
+        if isFixedLayout {
+            return fixedPageInsets.map { UIEdgeInsets(top: $0.top, left: $0.side, bottom: $0.bottom, right: $0.side) }
+        }
         guard isReflowable, let view = (navigator as? UIViewController)?.view,
               let window = view.window else { return nil }
         let safe = window.safeAreaInsets
@@ -86,8 +89,57 @@ final class ReaderModel {
         return UIEdgeInsets(top: insets.top, left: safe.left, bottom: insets.bottom, right: safe.right)
     }
 
+    /// Insets for comic and other fixed-layout pages: the safe area that
+    /// lies over the page view, which is nothing at the sides when the
+    /// layout has already moved the page clear of the Duo's rail.
+    var fixedPageInsets: FixedLayoutInsets? {
+        guard let view = navigator?.view, let window = view.window else { return nil }
+        return PageInsets.fixedLayout(
+            pageFrame: view.convert(view.bounds, to: window),
+            safeFrame: window.bounds.inset(by: window.safeAreaInsets)
+        )
+    }
+
     /// Readium's page gutter, fixed so the fold gap can be worked out from it.
     static let pageGutter: CGFloat = 20
+
+    /// Whether the book has fixed pages drawn by web views: comics and other
+    /// fixed-layout EPUBs, which can be scaled with `pageScale`. Not PDFs.
+    var isFixedLayout: Bool {
+        guard let publication else { return false }
+        return publication.metadata.layout == .fixed && !publication.conforms(to: .pdf)
+    }
+
+    /// This book's own page scale, or nil if it follows the default.
+    private(set) var bookPageScale: PageScale?
+
+    /// How fixed-layout pages are sized: the book's own choice, or the default.
+    var pageScale: PageScale {
+        bookPageScale ?? settings.pageScale
+    }
+
+    /// Sets the page scale for this book only, remembering it.
+    func setPageScale(_ scale: PageScale) {
+        guard scale != pageScale || bookPageScale == nil else { return }
+        bookPageScale = scale
+        if savesSettings { pageScaleStore.setScale(scale, for: book.id) }
+        onPageScaleChange?()
+    }
+
+    /// Makes this book's page scale the default for every book that hasn't
+    /// been given its own, and has this book follow the default too.
+    func makePageScaleDefault() {
+        let scale = pageScale
+        bookPageScale = nil
+        if savesSettings { pageScaleStore.setScale(nil, for: book.id) }
+        settings.pageScale = scale
+        onPageScaleChange?()
+    }
+
+    /// Whether this book's scale differs from the default.
+    var pageScaleDiffersFromDefault: Bool {
+        pageScale != settings.pageScale
+    }
 
     /// Whether the book reflows (EPUB). PDFs have fixed pages.
     var isReflowable: Bool {
@@ -115,6 +167,7 @@ final class ReaderModel {
     @ObservationIgnored private let booksFolder: URL
     @ObservationIgnored private let loader: PublicationLoader
     @ObservationIgnored private let settingsStore: ReaderSettingsStore
+    @ObservationIgnored private let pageScaleStore: PageScaleStore
     @ObservationIgnored private var modelContext: ModelContext?
     @ObservationIgnored private lazy var saveThrottle = SaveThrottle { [weak self] in self?.save() }
     @ObservationIgnored private var delegateBridge: NavigatorDelegateBridge?
@@ -125,12 +178,15 @@ final class ReaderModel {
         book: Book,
         booksFolder: URL,
         loader: PublicationLoader = .shared,
-        settingsStore: ReaderSettingsStore = ReaderSettingsStore()
+        settingsStore: ReaderSettingsStore = ReaderSettingsStore(),
+        pageScaleStore: PageScaleStore = PageScaleStore()
     ) {
         self.book = book
         self.booksFolder = booksFolder
         self.loader = loader
         self.settingsStore = settingsStore
+        self.pageScaleStore = pageScaleStore
+        bookPageScale = pageScaleStore.scale(for: book.id)
         // Start new readers at their Dynamic Type size.
         settings = settingsStore.load(firstRunFontScale: UIFontMetrics.default.scaledValue(for: 1))
         #if DEBUG
@@ -147,6 +203,12 @@ final class ReaderModel {
         }
         if let font = argument("-DuoReaderFont").flatMap(ReaderFont.init(rawValue:)) {
             settings.font = font
+            savesSettings = false
+        }
+        // `-DuoReaderPageScale <scale>` sets this book's page scale for the
+        // session (not saved).
+        if let scale = argument("-DuoReaderPageScale").flatMap(PageScale.init(rawValue:)) {
+            bookPageScale = scale
             savesSettings = false
         }
         #endif
@@ -309,6 +371,8 @@ final class ReaderModel {
     @ObservationIgnored var onLocationChange: (@MainActor () -> Void)?
     /// Called after settings reach the navigator, which may rebuild its pages.
     @ObservationIgnored var onSettingsApplied: (@MainActor () -> Void)?
+    /// Called when the page scale changes, so the page host can re-zoom.
+    @ObservationIgnored var onPageScaleChange: (@MainActor () -> Void)?
     /// Turns a page through the page host, with its animation and feedback.
     /// Set by the host; controls outside the page use it.
     @ObservationIgnored var requestTurn: (@MainActor (PageTurn) async -> Void)?

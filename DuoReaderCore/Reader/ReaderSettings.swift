@@ -48,6 +48,9 @@ public struct ReaderSettings: Codable, Equatable, Sendable {
     public var flow: ReaderFlow = .paged
     /// One page or two side by side when there's room.
     public var spread: ReaderSpread = .automatic
+    /// How comic and other fixed-layout pages are sized, for books that
+    /// haven't been given their own (see `PageScaleStore`).
+    public var pageScale: PageScale = .fitPage
 
     // MARK: Page turning
 
@@ -110,7 +113,7 @@ public struct ReaderSettings: Codable, Equatable, Sendable {
         case theme, followsSystemAppearance, darkTheme, customBackgroundHex, customTextHex, invertsImagesInDarkThemes
         case font, fontScale, fontWeight, usesPublisherStyles, lineHeight, paragraphSpacing, paragraphIndent
         case wordSpacing, letterSpacing, alignment, hyphenation
-        case margins, flow, spread, pageTurn, tapZones
+        case margins, flow, spread, pageScale, pageTurn, tapZones
     }
 
     public init(from decoder: any Decoder) throws {
@@ -138,6 +141,7 @@ public struct ReaderSettings: Codable, Equatable, Sendable {
         margins = (try? c.decodeIfPresent(Double.self, forKey: .margins)) ?? d.margins
         flow = (try? c.decodeIfPresent(ReaderFlow.self, forKey: .flow)) ?? d.flow
         spread = (try? c.decodeIfPresent(ReaderSpread.self, forKey: .spread)) ?? d.spread
+        pageScale = (try? c.decodeIfPresent(PageScale.self, forKey: .pageScale)) ?? d.pageScale
         pageTurn = (try? c.decodeIfPresent(PageTurnStyle.self, forKey: .pageTurn)) ?? d.pageTurn
         tapZones = (try? c.decodeIfPresent(TapZoneMode.self, forKey: .tapZones)) ?? d.tapZones
         self = clamped()

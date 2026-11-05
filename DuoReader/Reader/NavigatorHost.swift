@@ -87,8 +87,15 @@ final class ReaderPageViewController: UIViewController {
 
         // Readium makes new web views as pages change and when settings are
         // re-applied; they arrive with swipe paging on.
-        model.onLocationChange = { [weak self] in self?.updateNativePaging() }
-        model.onSettingsApplied = { [weak self] in self?.updateNativePaging() }
+        model.onLocationChange = { [weak self] in
+            self?.updateNativePaging()
+            self?.updatePageScale()
+        }
+        model.onSettingsApplied = { [weak self] in
+            self?.updateNativePaging()
+            self?.updatePageScale()
+        }
+        model.onPageScaleChange = { [weak self] in self?.updatePageScale(force: true) }
         model.requestTurn = { [weak self] turn in await self?.turn(turn) }
 
         let center = NotificationCenter.default
@@ -104,7 +111,9 @@ final class ReaderPageViewController: UIViewController {
         if let tapObserver { model.navigator?.removeObserver(tapObserver) }
         model.onLocationChange = nil
         model.onSettingsApplied = nil
+        model.onPageScaleChange = nil
         model.requestTurn = nil
+        pageScaler.cancel()
         for observer in accessibilityObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -112,6 +121,31 @@ final class ReaderPageViewController: UIViewController {
         super.viewDidLayoutSubviews()
         // A fold or resize can make Readium rebuild its pages.
         updateNativePaging()
+        updatePageScale()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        // The status bar comes and goes with the controls, and Readium
+        // re-fits comic pages to the new space.
+        updatePageScale()
+    }
+
+    // MARK: - Page scale
+
+    private let pageScaler = ComicPageScaler()
+
+    /// Sizes comic pages to the book's page scale. A no-op for reflowable
+    /// books and PDFs.
+    private func updatePageScale(force: Bool = false) {
+        guard isViewLoaded, model.isFixedLayout, let navigator = model.navigator else { return }
+        pageScaler.apply(
+            model.pageScale,
+            in: navigator.view,
+            insets: model.fixedPageInsets ?? .zero,
+            rightToLeft: model.isRightToLeft,
+            force: force
+        )
     }
 
     /// Re-applies anything that depends on the settings.

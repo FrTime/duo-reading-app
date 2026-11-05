@@ -153,9 +153,15 @@ struct ReaderView: View {
         ReaderSettingsView(
             settings: $model.settings,
             isReflowable: model.isReflowable,
+            pageScale: model.isFixedLayout ? pageScaleBinding : nil,
             outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs),
             onDone: onDone
         )
+    }
+
+    /// This book's page scale, remembered for the book.
+    private var pageScaleBinding: Binding<PageScale> {
+        Binding(get: { model.pageScale }, set: { model.setPageScale($0) })
     }
 
     private var outerCoverInputs: OuterCoverPolicy.Inputs {
@@ -246,6 +252,11 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready)
         }
+        if model.isFixedLayout {
+            ToolbarItem(placement: .topBarTrailing) {
+                pageScaleMenu
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 panel = .contents
@@ -263,6 +274,31 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready || !model.isSearchable)
         }
+    }
+}
+
+extension ReaderView {
+    /// Page size for comics, one tap from the page: fit, fill, stretch and
+    /// so on, remembered for the book.
+    fileprivate var pageScaleMenu: some View {
+        Menu {
+            Picker("Page Size", selection: pageScaleBinding) {
+                ForEach(PageScale.allCases) { scale in
+                    Label(scale.name, systemImage: scale.systemImage).tag(scale)
+                }
+            }
+            .pickerStyle(.inline)
+            Section {
+                Button("Use for All Comics", systemImage: "rectangle.stack") {
+                    model.makePageScaleDefault()
+                }
+                .disabled(!model.pageScaleDiffersFromDefault)
+            }
+        } label: {
+            Label("Page Size", systemImage: "aspectratio")
+        }
+        .accessibilityValue(Text(model.pageScale.name))
+        .disabled(model.state != .ready)
     }
 }
 

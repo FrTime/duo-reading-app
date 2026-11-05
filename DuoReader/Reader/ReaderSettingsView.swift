@@ -9,6 +9,9 @@ struct ReaderSettingsView: View {
     @Binding var settings: ReaderSettings
     /// PDFs keep their own typography, so only colour and layout show for them.
     var isReflowable = true
+    /// This book's page scale, for comics and other fixed-layout books; nil
+    /// hides the option.
+    var pageScale: Binding<PageScale>?
     /// Whether to offer the outer-screen cover, and what to say about it.
     var outerCoverStatus: OuterCoverPolicy.Status = .unsupported
     /// Closes settings when they're docked in the reader rather than presented.
@@ -28,6 +31,9 @@ struct ReaderSettingsView: View {
                 textSection
             }
             layoutSection
+            if let pageScale {
+                pageScaleSection(pageScale)
+            }
             if isReflowable {
                 spacingSection
             }
@@ -146,6 +152,27 @@ struct ReaderSettingsView: View {
                     format: .number.precision(.fractionLength(2))
                 )
             }
+        }
+    }
+
+    // MARK: - Page scale
+
+    private func pageScaleSection(_ pageScale: Binding<PageScale>) -> some View {
+        Section {
+            Picker("This Book", selection: pageScale) {
+                ForEach(PageScale.allCases) { scale in
+                    Label(scale.name, systemImage: scale.systemImage).tag(scale)
+                }
+            }
+            Picker("Default for Comics", selection: $settings.pageScale) {
+                ForEach(PageScale.allCases) { scale in
+                    Label(scale.name, systemImage: scale.systemImage).tag(scale)
+                }
+            }
+        } header: {
+            Text("Page Size")
+        } footer: {
+            Text(pageScale.wrappedValue.summary)
         }
     }
 
@@ -349,6 +376,41 @@ extension ReaderTheme {
         case .gray: String(localized: "Grey")
         case .dark: String(localized: "Black")
         case .custom: String(localized: "Custom")
+        }
+    }
+}
+
+extension PageScale {
+    var name: String {
+        switch self {
+        case .fitPage: String(localized: "Fit Page")
+        case .fitWidth: String(localized: "Fit Width")
+        case .fitHeight: String(localized: "Fit Height")
+        case .fill: String(localized: "Fill Screen")
+        case .stretch: String(localized: "Stretch")
+        case .original: String(localized: "Original Size")
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .fitPage: String(localized: "The whole page shows, with bands where its shape differs from the screen's.")
+        case .fitWidth: String(localized: "The page is as wide as the screen. Scroll down for the rest.")
+        case .fitHeight: String(localized: "The page is as tall as the screen. Drag sideways for the rest.")
+        case .fill: String(localized: "The page fills the screen with no bands. Drag to see the edges.")
+        case .stretch: String(localized: "The page is stretched to the screen's shape, which distorts it.")
+        case .original: String(localized: "One pixel of the scan for each pixel of the screen. Drag to look around.")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .fitPage: "rectangle.center.inset.filled"
+        case .fitWidth: "arrow.left.and.right"
+        case .fitHeight: "arrow.up.and.down"
+        case .fill: "arrow.up.left.and.arrow.down.right"
+        case .stretch: "arrow.up.and.down.and.arrow.left.and.right"
+        case .original: "1.magnifyingglass"
         }
     }
 }
