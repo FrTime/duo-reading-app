@@ -71,7 +71,10 @@ struct ReaderView: View {
             }
         case .ready:
             NavigatorHost(model: model)
-                .ignoresSafeArea()
+                // Readium insets the page for the top and bottom safe areas
+                // itself, but not the sides. On the Duo's outer screen the
+                // status bar is a column on the side, so keep the side insets.
+                .ignoresSafeArea(.container, edges: .vertical)
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
