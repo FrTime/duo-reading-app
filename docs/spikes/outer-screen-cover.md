@@ -68,9 +68,11 @@ a session running so the cover stays on the outer screen.
 
 ## Implementation notes for the real feature
 
-- Attach `.sceneAccessory { CameraCaptureAccessory(isEnabled:) { … } }` to the
-  reader view only. The system presents the top-most registration, so only one
-  screen should register.
+- Register `.sceneAccessory { CameraCaptureAccessory(isEnabled:) { … } }` on
+  the window's root view. A registration inside a `fullScreenCover` (where the
+  reader lives) never reaches the scene: nothing connects. Enable it only
+  while a book is open. The system presents the top-most registration, so
+  register it once.
 - Observe `onAvailabilityChange`; the system withdraws the content when the
   device closes, the app backgrounds, or capture stops. The app must work
   fully without it.
