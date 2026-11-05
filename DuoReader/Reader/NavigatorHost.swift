@@ -89,6 +89,7 @@ final class ReaderPageViewController: UIViewController {
         // re-applied; they arrive with swipe paging on.
         model.onLocationChange = { [weak self] in self?.updateNativePaging() }
         model.onSettingsApplied = { [weak self] in self?.updateNativePaging() }
+        model.requestTurn = { [weak self] turn in await self?.turn(turn) }
 
         let center = NotificationCenter.default
         for name in [UIAccessibility.reduceMotionStatusDidChangeNotification, UIAccessibility.voiceOverStatusDidChangeNotification] {
@@ -103,6 +104,7 @@ final class ReaderPageViewController: UIViewController {
         if let tapObserver { model.navigator?.removeObserver(tapObserver) }
         model.onLocationChange = nil
         model.onSettingsApplied = nil
+        model.requestTurn = nil
         for observer in accessibilityObservers { NotificationCenter.default.removeObserver(observer) }
     }
 

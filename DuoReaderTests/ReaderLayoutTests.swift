@@ -80,6 +80,16 @@ struct ReaderLayoutTests {
         #expect(ReaderLayout.resolve(size: innerTall, fold: fold, spread: .automatic, flow: .paged).pose == .flat)
     }
 
+    @Test func aFoldAtTheEdgeIsTreatedAsFlat() {
+        // Settings docked at the side can narrow the reader until the crease
+        // is near its edge; a sliver of page beside it is no use.
+        let fold = CGRect(x: 600, y: 0, width: 20, height: 860)
+        let narrowed = CGSize(width: 700, height: 860)
+        #expect(ReaderLayout.resolve(size: narrowed, fold: fold, spread: .automatic, flow: .paged).pose == .flat)
+        let straddling = CGRect(x: 690, y: 0, width: 20, height: 860)
+        #expect(ReaderLayout.resolve(size: narrowed, fold: straddling, spread: .automatic, flow: .paged).pose == .flat)
+    }
+
     @Test func extraMarginClearsTheFold() {
         let fold = CGRect(x: 370, y: 0, width: 20, height: 860)
         let layout = ReaderLayout.resolve(size: innerTall, fold: fold, spread: .automatic, flow: .paged)

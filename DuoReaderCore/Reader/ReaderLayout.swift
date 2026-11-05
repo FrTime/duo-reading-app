@@ -55,7 +55,11 @@ public struct ReaderLayout: Equatable, Sendable {
     public static func resolve(size: CGSize, fold: CGRect?, spread: ReaderSpread, flow: ReaderFlow) -> ReaderLayout {
         let bounds = CGRect(origin: .zero, size: size)
 
-        guard let fold = fold?.intersection(bounds), !fold.isNull, fold.width > 0 || fold.height > 0 else {
+        // A fold counts only when it lies fully inside the reader with room
+        // for a page on each side; a sliver at the edge (say, when settings
+        // narrow the reader) is treated as flat.
+        guard let raw = fold, case let fold = raw.intersection(bounds), !fold.isNull,
+              fold.width > 0 || fold.height > 0, hasRoomAround(raw, in: size) else {
             return ReaderLayout(
                 pose: .flat,
                 pageFrame: bounds,
@@ -92,6 +96,16 @@ public struct ReaderLayout: Equatable, Sendable {
             columns: columns(for: top.size, spread: spread, flow: flow),
             foldWidth: 0
         )
+    }
+
+    /// Smallest side either side of the fold that's worth putting a page in.
+    public static let minimumPanelLength: CGFloat = 200
+
+    static func hasRoomAround(_ fold: CGRect, in size: CGSize) -> Bool {
+        if fold.height >= fold.width {
+            return min(fold.minX, size.width - fold.maxX) >= minimumPanelLength
+        }
+        return min(fold.minY, size.height - fold.maxY) >= minimumPanelLength
     }
 
     static func columns(for size: CGSize, spread: ReaderSpread, flow: ReaderFlow) -> Int {

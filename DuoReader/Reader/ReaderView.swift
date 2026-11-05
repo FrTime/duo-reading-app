@@ -12,7 +12,6 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showingSettings = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
@@ -33,19 +32,18 @@ struct ReaderView: View {
                 .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
                 // On a wide screen (an open Duo) settings dock at the side so
-                // the page stays visible and live instead of under a sheet.
-                .inspector(isPresented: settingsBinding(regularWidth: true)) {
-                    settingsView
+                // the page stays visible and live; at compact width the
+                // inspector shows as a sheet. One presenter, so folding or
+                // unfolding with settings open doesn't close them.
+                .inspector(isPresented: $showingSettings) {
+                    ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
                         .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                        .presentationDetents([.medium, .large])
+                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
                 }
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
-        .sheet(isPresented: settingsBinding(regularWidth: false)) {
-            settingsView
-                .presentationDetents([.medium, .large])
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        }
         .task {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
@@ -92,18 +90,6 @@ struct ReaderView: View {
     /// gives the controls their own space.
     private var bottomBarVisibility: Visibility {
         model.layout?.controlsFrame != nil ? .hidden : chromeVisibility
-    }
-
-    private var settingsView: some View {
-        ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
-    }
-
-    /// Settings show as an inspector at regular width and a sheet otherwise.
-    private func settingsBinding(regularWidth: Bool) -> Binding<Bool> {
-        Binding(
-            get: { showingSettings && (horizontalSizeClass == .regular) == regularWidth },
-            set: { showingSettings = $0 }
-        )
     }
 
     @ViewBuilder
@@ -236,7 +222,9 @@ private struct ReaderSurface: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-            .animation(.easeInOut(duration: 0.25), value: layout)
+            // Fade the panel in and out, but don't animate the page's frame:
+            // the web view would repaginate and then slide.
+            .animation(.easeInOut(duration: 0.25), value: layout.controlsFrame != nil)
             .onChange(of: layout, initial: true) { _, new in
                 model.layout = new
             }
@@ -267,7 +255,8 @@ struct ReaderSidePanel: View {
             }
             HStack(spacing: 32) {
                 Button {
-                    Task { await model.turn(.backward, animated: model.settings.pageTurn == .slide) }
+                    // Through the page host, so turns use the chosen animation.
+                    Task { await model.requestTurn?(.backward) }
                 } label: {
                     Label("Previous Page", systemImage: "chevron.backward")
                         .frame(minWidth: 44, minHeight: 44)
@@ -276,8 +265,9 @@ struct ReaderSidePanel: View {
                     Label("Reading Settings", systemImage: "textformat.size")
                         .frame(minWidth: 44, minHeight: 44)
                 }
+                .accessibilityHint(Text("Theme, font and layout"))
                 Button {
-                    Task { await model.turn(.forward, animated: model.settings.pageTurn == .slide) }
+                    Task { await model.requestTurn?(.forward) }
                 } label: {
                     Label("Next Page", systemImage: "chevron.forward")
                         .frame(minWidth: 44, minHeight: 44)
@@ -289,7 +279,12 @@ struct ReaderSidePanel: View {
             Spacer(minLength: 0)
         }
         .padding()
+        // The reader ignores the vertical safe area, so keep the buttons
+        // clear of the home indicator when the panel is at the bottom.
+        .padding(.bottom, pose == .tabletop ? 20 : 0)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Reader Controls"))
         .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
         .background(Color(uiColor: model.palette.background.uiColor))
     }

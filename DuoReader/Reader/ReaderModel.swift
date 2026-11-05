@@ -236,6 +236,9 @@ final class ReaderModel {
     @ObservationIgnored var onLocationChange: (@MainActor () -> Void)?
     /// Called after settings reach the navigator, which may rebuild its pages.
     @ObservationIgnored var onSettingsApplied: (@MainActor () -> Void)?
+    /// Turns a page through the page host, with its animation and feedback.
+    /// Set by the host; controls outside the page use it.
+    @ObservationIgnored var requestTurn: (@MainActor (PageTurn) async -> Void)?
 
     /// Whether the book reads right to left, which flips which side is "next".
     var isRightToLeft: Bool {
