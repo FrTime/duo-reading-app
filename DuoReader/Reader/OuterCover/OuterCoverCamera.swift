@@ -25,6 +25,17 @@ final class OuterCoverCamera {
     @ObservationIgnored private var isConfigured = false
     @ObservationIgnored private let logger = Logger(subsystem: "com.timothymace.duoreader", category: "OuterCover")
 
+    private init() {
+        // An interrupted session (another app took the camera, a call, the app
+        // went to the background) doesn't always restart by itself.
+        let center = NotificationCenter.default
+        for name in [AVCaptureSession.interruptionEndedNotification, AVCaptureSession.runtimeErrorNotification] {
+            center.addObserver(forName: name, object: session, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resumeIfNeeded() }
+            }
+        }
+    }
+
     /// Re-reads the permission, which can change in Settings while the app runs.
     func refreshAccess() {
         access = Self.currentAccess()
@@ -36,6 +47,16 @@ final class OuterCoverCamera {
             _ = await AVCaptureDevice.requestAccess(for: .video)
         }
         refreshAccess()
+    }
+
+    /// Restarts a session that should be running but isn't, as after the app
+    /// comes back from the background or an interruption ends.
+    func resumeIfNeeded() {
+        guard isRunning else { return }
+        let session = SendableSession(session)
+        queue.async {
+            if !session.value.isRunning { session.value.startRunning() }
+        }
     }
 
     func setRunning(_ shouldRun: Bool) {

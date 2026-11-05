@@ -216,9 +216,20 @@ struct LibraryView: View {
     @ViewBuilder
     private var importOverlay: some View {
         if importController.isImporting {
-            ProgressView("Importing…")
-                .padding()
-                .background(.regularMaterial, in: .rect(cornerRadius: 12))
+            Group {
+                if let progress = importController.progress, progress.total > 1 {
+                    ProgressView(value: progress.fractionDone) {
+                        Text(progress.label)
+                    } currentValueLabel: {
+                        Text(progress.fileName).lineLimit(1).truncationMode(.middle)
+                    }
+                    .frame(maxWidth: 320)
+                } else {
+                    ProgressView(importController.progress?.label ?? String(localized: "Importing…"))
+                }
+            }
+            .padding()
+            .background(.regularMaterial, in: .rect(cornerRadius: 12))
         }
     }
 

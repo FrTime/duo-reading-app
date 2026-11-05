@@ -105,7 +105,10 @@ struct ReaderView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.flush() }
-            if phase == .active { outerCoverCamera.refreshAccess() }
+            if phase == .active {
+                outerCoverCamera.refreshAccess()
+                outerCoverCamera.resumeIfNeeded()
+            }
         }
         .onDisappear {
             model.close()
