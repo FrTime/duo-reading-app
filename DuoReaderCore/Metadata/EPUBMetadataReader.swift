@@ -6,6 +6,9 @@ import ZIPFoundation
 public struct EPUBMetadataReader: MetadataReader {
     /// Cover images bigger than this are skipped rather than loaded into memory.
     static let maxCoverBytes: Int64 = 20 * 1024 * 1024
+    /// Limit for XML and XHTML reads (container, OPF, preface), so a crafted
+    /// archive can't inflate gigabytes into memory.
+    static let maxDocumentBytes: Int64 = 5 * 1024 * 1024
 
     public init() {}
 
@@ -36,7 +39,7 @@ public struct EPUBMetadataReader: MetadataReader {
         if let coverHref = package.coverHref {
             let path = Self.resolve(coverHref, relativeTo: base)
             if let entry = archive[path], Int64(entry.uncompressedSize) <= Self.maxCoverBytes {
-                metadata.coverImageData = try Self.data(at: path, in: archive)
+                metadata.coverImageData = try Self.data(at: path, in: archive, limit: Self.maxCoverBytes)
             }
         }
 
@@ -66,10 +69,20 @@ public struct EPUBMetadataReader: MetadataReader {
 
     // MARK: - Helpers
 
-    static func data(at path: String, in archive: Archive) throws -> Data? {
+    /// Reads one entry, refusing entries larger than `limit` both by their
+    /// declared size and by what actually inflates (the header can lie).
+    static func data(at path: String, in archive: Archive, limit: Int64 = maxDocumentBytes) throws -> Data? {
         guard let entry = archive[path] else { return nil }
+        guard Int64(entry.uncompressedSize) <= limit else {
+            throw MetadataError.malformed("Entry too large: \(path)")
+        }
         var data = Data()
-        _ = try archive.extract(entry, skipCRC32: false) { data.append($0) }
+        _ = try archive.extract(entry, skipCRC32: false) { chunk in
+            guard Int64(data.count + chunk.count) <= limit else {
+                throw MetadataError.malformed("Entry too large: \(path)")
+            }
+            data.append(chunk)
+        }
         return data
     }
 

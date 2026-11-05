@@ -170,6 +170,29 @@ struct EPUBMetadataReaderTests {
         #expect(throws: MetadataError.malformed("Missing package document")) { try reader.readMetadata(from: url) }
     }
 
+    @Test func rejectsOversizedPackageDocument() throws {
+        let huge = Data(repeating: 0x20, count: Int(EPUBMetadataReader.maxDocumentBytes) + 1)
+        let url = try Fixtures.epub(["OEBPS/content.opf": huge])
+        #expect(throws: MetadataError.malformed("Entry too large: OEBPS/content.opf")) {
+            try reader.readMetadata(from: url)
+        }
+    }
+
+    @Test func skipsOversizedCover() throws {
+        let opf = """
+        <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Big Cover</dc:title></metadata>
+          <manifest><item id="c" href="c.png" media-type="image/png" properties="cover-image"/></manifest>
+          <spine/>
+        </package>
+        """
+        let big = Data(repeating: 0, count: Int(EPUBMetadataReader.maxCoverBytes) + 1)
+        let url = try Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8), "OEBPS/c.png": big])
+        let m = try reader.readMetadata(from: url)
+        #expect(m.title == "Big Cover")
+        #expect(m.coverImageData == nil)
+    }
+
     @Test func detectsDRM() throws {
         let encryption = """
         <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
