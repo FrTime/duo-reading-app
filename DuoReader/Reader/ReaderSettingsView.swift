@@ -30,13 +30,14 @@ struct ReaderSettingsView: View {
                     Button(action: onDone) {
                         Label("Done", systemImage: "checkmark")
                             .labelStyle(.iconOnly)
-                            .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
                 form
             }
             .accessibilityAction(.escape, onDone)
