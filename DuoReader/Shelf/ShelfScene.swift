@@ -101,6 +101,7 @@ final class ShelfScene {
         layout: ShelfLayout,
         selected: UUID?,
         held: Held?,
+        visibleHalfWidth: Float? = nil,
         coverFor: (UUID) -> Book?,
         animated: Bool
     ) {
@@ -137,7 +138,7 @@ final class ShelfScene {
                 continue
             } else if let slot = layout.slot(for: id) {
                 transform = id == selected
-                    ? Self.selectedTransform(slot: slot, spec: state.spec, layout: layout)
+                    ? Self.selectedTransform(slot: slot, spec: state.spec, layout: layout, visibleHalfWidth: visibleHalfWidth)
                     : Self.restingTransform(slot: slot, spec: state.spec, metrics: metrics, mode: layout.mode)
             } else {
                 continue
@@ -196,7 +197,10 @@ final class ShelfScene {
     static let selectedScale: Float = 1.25
     static let selectedAngle: Float = 0.35
 
-    static func selectedTransform(slot: ShelfLayout.Slot, spec: ShelfBookSpec, layout: ShelfLayout) -> Transform {
+    /// How far toward the camera a pulled-out book comes.
+    static let selectedZ: Float = 0.12
+
+    static func selectedTransform(slot: ShelfLayout.Slot, spec: ShelfBookSpec, layout: ShelfLayout, visibleHalfWidth: Float?) -> Transform {
         // Turned to face the camera and enlarged, but kept inside the case
         // so a book at either end doesn't slide off the screen.
         let m = layout.metrics
@@ -204,7 +208,11 @@ final class ShelfScene {
         return Transform(
             scale: SIMD3(repeating: selectedScale),
             rotation: simd_quatf(angle: selectedAngle, axis: SIMD3(0, 1, 0)),
-            translation: SIMD3(layout.clampedX(slot.x, halfExtent: halfExtent), slot.baseY + slot.height / 2 + 0.02, 0.12)
+            translation: SIMD3(
+                layout.clampedX(slot.x, halfExtent: halfExtent, visibleHalfWidth: visibleHalfWidth),
+                slot.baseY + slot.height / 2 + 0.02,
+                selectedZ
+            )
         )
     }
 

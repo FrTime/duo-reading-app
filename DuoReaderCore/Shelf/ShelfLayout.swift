@@ -186,9 +186,10 @@ public struct ShelfLayout: Sendable {
     }
 
     /// `x` moved just enough that something `halfExtent` wide either side of
-    /// it stays inside the case.
-    public func clampedX(_ x: Float, halfExtent: Float) -> Float {
-        let limit = shelfWidth / 2 - halfExtent
+    /// it stays inside the case, and inside `visibleHalfWidth` of the centre
+    /// when given (things nearer the camera see less of the scene).
+    public func clampedX(_ x: Float, halfExtent: Float, visibleHalfWidth: Float? = nil) -> Float {
+        let limit = min(shelfWidth / 2, visibleHalfWidth ?? .infinity) - halfExtent
         guard limit > 0 else { return 0 }
         return min(max(x, -limit), limit)
     }

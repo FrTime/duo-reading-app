@@ -42,6 +42,11 @@ public struct ShelfCamera: Equatable, Sendable {
     public var halfHeight: Float { Float(max(viewSize.height, 1)) / 2 / scale }
     public var halfWidth: Float { Float(max(viewSize.width, 1)) / 2 / scale }
 
+    /// Half the visible width on the plane at depth `z` (nearer is narrower).
+    public func visibleHalfWidth(atZ z: Float) -> Float {
+        halfWidth * max(distance - z, 0) / max(distance, 0.0001)
+    }
+
     /// How far in front of z = 0 the camera sits for that scale.
     public var distance: Float { halfHeight / halfFOVTangent }
 

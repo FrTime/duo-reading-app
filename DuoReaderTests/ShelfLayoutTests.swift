@@ -106,6 +106,11 @@ struct ShelfLayoutTests {
         #expect(layout.clampedX(0, halfExtent: 0.12) == 0)
         #expect(layout.clampedX(0.49, halfExtent: 0.12) <= layout.shelfWidth / 2 - 0.12 + 1e-6)
         #expect(layout.clampedX(0.3, halfExtent: 2) == 0)
+        // Nearer the camera less is visible, so the clamp tightens.
+        let camera = ShelfCamera(viewSize: CGSize(width: 720, height: 600))
+        let near = camera.visibleHalfWidth(atZ: 0.2)
+        #expect(near < camera.halfWidth)
+        #expect(layout.clampedX(-0.49, halfExtent: 0.12, visibleHalfWidth: near) >= -near + 0.12 - 1e-6)
     }
 
     @Test func booksGrowWithLargerText() {

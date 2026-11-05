@@ -250,6 +250,8 @@ struct ShelfView: View {
             layout: layout,
             selected: selectedID,
             held: heldPoint,
+            // The turned book's nearest edge comes about 0.08 closer still.
+            visibleHalfWidth: camera.visibleHalfWidth(atZ: ShelfScene.selectedZ + 0.08) * 0.97,
             coverFor: { byID[$0] },
             animated: animated
         )
