@@ -218,7 +218,7 @@ struct CoverTemplateTests {
         let flat = CoverTemplate.wraparound.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .none)
         #expect(flat.textBoxes.allSatisfy { !$0.hasShadow })
         let art = CoverTemplate.wraparound.makeDesign(seed: CoverFixtures.seed(), palette: palette, imageSource: .embedded)
-        #expect(art.textBoxes(on: .back).allSatisfy(\.hasShadow))
+        #expect(art.textBoxes(on: .back).allSatisfy { $0.hasShadow })
     }
 
     @Test func defaultTemplateDependsOnArtwork() {
