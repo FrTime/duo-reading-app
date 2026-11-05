@@ -1,4 +1,5 @@
 import Foundation
+import ReadiumZIPFoundation
 
 /// Converts FictionBook 2 (`.fb2`) books: sections become chapters (nested
 /// sections become sub-headings), with emphasis, poems, epigraphs, the cover
@@ -10,11 +11,32 @@ public struct FB2Converter: BookConverter {
     public init() {}
 
     public func document(from url: URL) async throws -> EPUBDocument {
-        let data = try BookConverters.readSource(url)
+        let data = try await Self.source(url)
         guard let document = Self.document(fromFB2: data, fallbackTitle: BookConverters.title(for: url)) else {
             throw ConversionError.unreadable
         }
         return document
+    }
+
+    /// The FictionBook's bytes, unzipping `name.fb2.zip` first (capped like any source).
+    static func source(_ url: URL) async throws -> Data {
+        let data = try BookConverters.readSource(url)
+        guard data.starts(with: [0x50, 0x4B, 0x03, 0x04]) else { return data }
+        do {
+            let archive = try await Archive(url: url, accessMode: .read)
+            guard let entry = try await ZIPSniffer.fb2Entry(in: archive),
+                  let book = try await EPUBMetadataReader.data(at: entry.path, in: archive, limit: Int64(BookConverters.maxSourceBytes)) else {
+                throw ConversionError.unreadable
+            }
+            return book
+        } catch let error as ConversionError {
+            throw error
+        } catch MetadataError.malformed {
+            // Over the cap once unzipped.
+            throw ConversionError.tooLarge
+        } catch {
+            throw ConversionError.unreadable
+        }
     }
 
     static func document(fromFB2 data: Data, fallbackTitle: String) -> EPUBDocument? {
