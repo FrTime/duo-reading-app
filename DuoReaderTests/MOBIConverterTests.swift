@@ -15,6 +15,9 @@ enum MOBIFixture {
         var compressed = false
         var encrypted = false
         var trailingEntries = false
+        /// Overrides the compression type, e.g. 17480 for Huffman/CDIC.
+        var compressionType: UInt16?
+        var extraEXTH: [(UInt32, Data)] = []
     }
 
     static let mobi6HTML = """
@@ -27,17 +30,36 @@ enum MOBIFixture {
 
     /// A MOBI 6 book: one HTML stream.
     static func mobi6(html: String = mobi6HTML, _ options: Options = Options()) -> Data {
+        database(mobi6Records(html: html, options))
+    }
+
+    static func mobi6Records(html: String = mobi6HTML, _ options: Options) -> [Data] {
         let text = Data(html.utf8)
         let textRecords = records(of: text, options)
         var images: [Data] = []
         if let cover = options.cover { images.append(cover) }
         let header = recordZero(textLength: text.count, textRecords: textRecords.count, version: 6,
                                 firstImage: UInt32(1 + textRecords.count), kf8: nil, options)
-        return database([header] + textRecords + images)
+        return [header] + textRecords + images
     }
 
     /// A KF8 (AZW3) book: two skeleton files with one fragment each, plus a CSS flow.
     static func kf8(_ options: Options = Options()) -> Data {
+        database(kf8Records(options))
+    }
+
+    /// A "both" file: MOBI 6 records, BOUNDARY, then a KF8 book whose
+    /// indexes count from its own header. EXTH 121 names the KF8 header.
+    static func combined(boundary: Int? = nil) -> Data {
+        var options = Options()
+        options.cover = nil
+        let kf8 = kf8Records(options)
+        let mobi6Count = mobi6Records(options).count
+        options.extraEXTH = [(121, be32(UInt32(boundary ?? mobi6Count + 1)))]
+        return database(mobi6Records(options) + [Data("BOUNDARY".utf8)] + kf8)
+    }
+
+    static func kf8Records(_ options: Options) -> [Data] {
         let skeleton1 = #"<?xml version="1.0"?><html><head><title>p1</title></head><body aid="0"></body></html>"#
         let fragment1 = "<h1>Chapter One</h1><p>Hello from KF8.</p>"
         let skeleton2 = #"<html><head><title>p2</title></head><body aid="1"><div aid="2"></div></body></html>"#
@@ -73,7 +95,7 @@ enum MOBIFixture {
         if let cover = options.cover { images.append(cover) }
         let header = recordZero(textLength: raw.count, textRecords: textRecords.count, version: 8,
                                 firstImage: UInt32(fdstIndex + 5), kf8: kf8, options)
-        return database([header] + textRecords + [fdst] + skel + frag + images)
+        return [header] + textRecords + [fdst] + skel + frag + images
     }
 
     // MARK: - Pieces
@@ -115,7 +137,7 @@ enum MOBIFixture {
         let headerLength = 0x108
         var r = Data(count: 16 + headerLength)
         func put(_ bytes: Data, _ offset: Int) { r.replaceSubrange(offset ..< offset + bytes.count, with: bytes) }
-        put(be16(o.compressed ? 2 : 1), 0)
+        put(be16(o.compressionType ?? (o.compressed ? 2 : 1)), 0)
         put(be32(UInt32(textLength)), 4)
         put(be16(UInt16(textRecords)), 8)
         put(be16(4096), 10)
@@ -138,6 +160,7 @@ enum MOBIFixture {
         if let d = o.description { exth.append((103, Data(d.utf8))) }
         if let l = o.language { exth.append((524, Data(l.utf8))) }
         if o.cover != nil { exth.append((201, be32(0))) }
+        exth += o.extraEXTH
         let body = exth.reduce(Data()) { $0 + be32($1.0) + be32(UInt32($1.1.count + 8)) + $1.1 }
         r += Data("EXTH".utf8) + be32(UInt32(12 + body.count)) + be32(UInt32(exth.count)) + body
         let name = Data("Full Name".utf8)
@@ -248,6 +271,31 @@ struct MOBIConverterTests {
         #expect(!body.contains("color: red"))
         #expect(!body.contains("p1"))
         #expect(doc.coverImage == Fixtures.tinyPNG)
+    }
+
+    @Test func combinedFilesPreferKF8AndFallBackToMOBI6() throws {
+        let both = try MOBIConverter.document(fromMOBI: MOBIFixture.combined(), fallbackTitle: "f")
+        let kf8Text = both.chapters.map(\.body).joined()
+        #expect(kf8Text.contains("Hello from KF8."))
+        #expect(!kf8Text.contains("Morning came."))
+
+        // EXTH 121 pointing somewhere that isn't next to BOUNDARY: use the MOBI 6 text.
+        let broken = try MOBIConverter.document(fromMOBI: MOBIFixture.combined(boundary: 1), fallbackTitle: "f")
+        #expect(broken.chapters.map(\.body).joined().contains("Morning came."))
+    }
+
+    @Test func huffmanCompressionIsUnreadableForNow() {
+        var options = MOBIFixture.Options()
+        options.compressionType = 17480
+        #expect(throws: ConversionError.unreadable) {
+            _ = try MOBIConverter.document(fromMOBI: MOBIFixture.mobi6(options), fallbackTitle: "f")
+        }
+    }
+
+    @Test func legacyEncodingWithUndefinedBytesStillDecodes() {
+        // 0x81 isn't defined in Windows-1252; one stray byte mustn't sink the book.
+        let header = MOBIBook.Header.decodeLegacy(Data([0x43, 0x61, 0x66, 0xE9, 0x81]))
+        #expect(header.hasPrefix("Café"))
     }
 
     @Test func encryptedBooksAreReportedAsDRM() {

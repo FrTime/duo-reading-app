@@ -439,9 +439,15 @@ struct MOBIBook {
 
         /// Text in the book's declared encoding, trimmed, or nil when empty.
         func string(_ data: Data) -> String? {
-            let text = utf8 ? String(decoding: data, as: UTF8.self) : String(data: data, encoding: .windowsCP1252)
-            let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
-            return trimmed?.isEmpty == false ? trimmed : nil
+            let text = utf8 ? String(decoding: data, as: UTF8.self) : Self.decodeLegacy(data)
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        /// Windows-1252, falling back to Latin-1 (which maps every byte) when
+        /// the text has bytes 1252 leaves undefined, such as 0x81.
+        static func decodeLegacy(_ data: Data) -> String {
+            String(data: data, encoding: .windowsCP1252) ?? String(data: data, encoding: .isoLatin1) ?? ""
         }
     }
 }
