@@ -90,10 +90,13 @@ struct ReaderView: View {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
             #if DEBUG
-            // `-DuoReaderShowSettings` opens settings once the book is open,
-            // for screenshots on simulators where taps don't get through.
-            if ProcessInfo.processInfo.arguments.contains("-DuoReaderShowSettings"), model.state == .ready {
-                panel = .settings
+            // `-DuoReaderShowPanel settings|contents|search` opens that panel
+            // once the book is open, for screenshots on simulators where taps
+            // don't get through.
+            let arguments = ProcessInfo.processInfo.arguments
+            if model.state == .ready, let index = arguments.firstIndex(of: "-DuoReaderShowPanel"),
+               arguments.indices.contains(index + 1) {
+                panel = ReaderPanel(rawValue: arguments[index + 1])
             }
             #endif
         }
