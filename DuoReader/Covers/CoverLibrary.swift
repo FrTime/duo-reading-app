@@ -1,4 +1,5 @@
 import Observation
+import SwiftData
 import SwiftUI
 import UIKit
 
@@ -37,7 +38,7 @@ final class CoverLibrary {
     /// Call `metadataDidChange(for:)` after re-importing a book.
     func design(for book: Book) async -> CoverDesign {
         if let cached = designs[book.id] { return cached }
-        let design = await store.prepare(book.coverSeed)
+        let design = await store.prepare(Self.seed(for: book))
         designs[book.id] = design
         return design
     }
@@ -46,7 +47,7 @@ final class CoverLibrary {
     /// the user edited aren't touched.
     func metadataDidChange(for book: Book) async {
         let previous = designs[book.id]
-        let design = await store.prepare(book.coverSeed)
+        let design = await store.prepare(Self.seed(for: book))
         designs[book.id] = design
         if previous != design { bump(book.id) }
     }
@@ -93,7 +94,7 @@ final class CoverLibrary {
 
     /// Throws away the user's edits and goes back to the default cover.
     func resetToDefault(for book: Book) async {
-        let design = await store.reset(book.coverSeed)
+        let design = await store.reset(Self.seed(for: book))
         designs[book.id] = design
         bump(book.id)
     }
@@ -108,6 +109,25 @@ final class CoverLibrary {
         await store.delete(bookID)
         designs[bookID] = nil
         bump(bookID)
+    }
+
+    /// The book's cover seed, read off the main actor when possible.
+    ///
+    /// The seed includes the file's cover image, which SwiftData keeps in
+    /// external storage, so reading it is a disk read. With hundreds of books
+    /// on the shelf those reads would hitch scrolling on first launch, so a
+    /// saved book is fetched again in a background context to build the seed
+    /// there. Unsaved books (and books with unsaved edits) use the main copy.
+    static func seed(for book: Book) async -> CoverSeed {
+        guard let container = book.modelContext?.container, !book.hasChanges else { return book.coverSeed }
+        let id = book.id
+        let seed = await Task.detached(priority: .userInitiated) { () -> CoverSeed? in
+            let context = ModelContext(container)
+            var descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.id == id })
+            descriptor.fetchLimit = 1
+            return try? context.fetch(descriptor).first?.coverSeed
+        }.value
+        return seed ?? book.coverSeed
     }
 
     private func bump(_ bookID: UUID) {
