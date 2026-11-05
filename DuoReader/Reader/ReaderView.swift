@@ -112,10 +112,10 @@ struct ReaderView: View {
             }
         case .ready:
             ReaderSurface(model: model) { showingSettings = true }
-                // Readium insets the page for the top and bottom safe areas
-                // itself, but not the sides. On the Duo's outer screen the
-                // status bar is a column on the side, so keep the side insets.
-                .ignoresSafeArea(.container, edges: .vertical)
+                // Edge to edge: Readium insets the page for the top and bottom
+                // safe areas itself, and the layout keeps the page clear of
+                // the side rail while centring a spread on the hinge.
+                .ignoresSafeArea(.container)
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -201,6 +201,14 @@ enum ReaderProgressText {
 private struct ReaderSurface: View {
     let model: ReaderModel
     let showSettings: () -> Void
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    /// The layout works in physical left and right, the way the Duo's panels are.
+    private func sideInsets(_ insets: EdgeInsets) -> ReaderLayout.SideInsets {
+        layoutDirection == .rightToLeft
+            ? ReaderLayout.SideInsets(left: insets.trailing, right: insets.leading)
+            : ReaderLayout.SideInsets(left: insets.leading, right: insets.trailing)
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -208,6 +216,7 @@ private struct ReaderSurface: View {
             let layout = ReaderLayout.resolve(
                 size: proxy.size,
                 fold: fold,
+                insets: sideInsets(proxy.safeAreaInsets),
                 spread: model.settings.spread,
                 flow: model.settings.flow
             )

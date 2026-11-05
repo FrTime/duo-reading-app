@@ -80,6 +80,35 @@ struct ReaderLayoutTests {
         #expect(ReaderLayout.resolve(size: innerTall, fold: fold, spread: .automatic, flow: .paged).pose == .flat)
     }
 
+    @Test func anOpenSpreadIsCentredOnTheHingeNotTheRail() {
+        // An open Duo: the fold is inactive, the hinge is the middle, and the
+        // system rail takes 78 pt on the right.
+        let size = CGSize(width: 951, height: 669)
+        let layout = ReaderLayout.resolve(
+            size: size, fold: nil, insets: .init(right: 78), spread: .automatic, flow: .paged
+        )
+        #expect(layout.columns == 2)
+        #expect(layout.pageFrame.midX == size.width / 2)
+        #expect(layout.pageFrame.maxX <= size.width - 78)
+    }
+
+    @Test func onePageStaysClearOfTheRail() {
+        let layout = ReaderLayout.resolve(
+            size: outer, fold: nil, insets: .init(right: 78), spread: .single, flow: .paged
+        )
+        #expect(layout.pageFrame == CGRect(x: 0, y: 0, width: outer.width - 78, height: outer.height))
+    }
+
+    @Test func bookPoseKeepsTheSpreadOnTheFoldAndPanelsClearOfTheRail() {
+        let fold = CGRect(x: 370, y: 0, width: 20, height: 860)
+        let rail = ReaderLayout.SideInsets(right: 78)
+        let spread = ReaderLayout.resolve(size: innerTall, fold: fold, insets: rail, spread: .automatic, flow: .paged)
+        #expect(spread.pageFrame.midX == fold.midX)
+        #expect(spread.pageFrame.maxX <= innerTall.width - 78)
+        let single = ReaderLayout.resolve(size: innerTall, fold: fold, insets: rail, spread: .single, flow: .paged)
+        #expect(single.controlsFrame?.maxX == innerTall.width - 78)
+    }
+
     @Test func aFoldAtTheEdgeIsTreatedAsFlat() {
         // Settings docked at the side can narrow the reader until the crease
         // is near its edge; a sliver of page beside it is no use.
