@@ -46,6 +46,8 @@ final class ShelfRenderHost: UIView {
     /// moved again is thrown away.
     private var generation = 0
     private(set) var isLive = false
+    /// The size the still was taken at, in points.
+    private var parkedSize: CGSize?
 
     init(scene: ShelfScene, background: UIColor) {
         arView = ARView(frame: .zero, cameraMode: .nonAR, automaticallyConfigureSession: false)
@@ -78,8 +80,9 @@ final class ShelfRenderHost: UIView {
         super.layoutSubviews()
         arView.frame = bounds
         still.frame = bounds
-        // A resize changes the picture; draw it live again.
-        if !isLive, still.image?.size != bounds.size { wake() }
+        // A resize changes the picture; draw it live again. (Compared in
+        // points: the snapshot image itself is in pixels.)
+        if !isLive, parkedSize != bounds.size { wake() }
     }
 
     /// Something in the scene changed: draw live, and park again once it
@@ -117,6 +120,7 @@ final class ShelfRenderHost: UIView {
             MainActor.assumeIsolated {
                 guard let self, self.generation == current, self.isLive, let image else { return }
                 self.still.image = image
+                self.parkedSize = self.bounds.size
                 self.still.isHidden = false
                 self.bringSubviewToFront(self.still)
                 // Out of the window, RealityKit stops drawing.
