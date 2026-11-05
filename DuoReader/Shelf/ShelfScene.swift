@@ -254,7 +254,7 @@ final class ShelfScene {
     // MARK: - Bookcase
 
     private func buildCaseIfNeeded(_ layout: ShelfLayout) async {
-        let key = CaseKey(rows: layout.rowCount, width: layout.shelfWidth)
+        let key = CaseKey(rows: layout.caseRowCount, width: layout.shelfWidth)
         guard key != caseKey else { return }
         caseKey = key
 
@@ -275,10 +275,10 @@ final class ShelfScene {
 
         // A wall far behind, so the edges of the scene never show.
         let wall = ModelEntity(mesh: .generatePlane(width: 40, height: 40), materials: [materials.wall])
-        wall.position = SIMD3(0, (layout.contentTop + layout.contentBottom) / 2, -depth - 0.02)
+        wall.position = SIMD3(0, (layout.contentTop + layout.caseBottom) / 2, -depth - 0.02)
         caseRoot.addChild(wall)
 
-        for row in 0..<layout.rowCount {
+        for row in 0..<layout.caseRowCount {
             let base = ShelfLayout.baseY(row: row, metrics: m)
             let board = ModelEntity(
                 mesh: .generateBox(width: width, height: m.boardThickness, depth: depth),
@@ -293,8 +293,8 @@ final class ShelfScene {
         }
 
         // The case's top and sides.
-        let height = layout.contentHeight + m.boardThickness
-        let midY = (layout.contentTop + layout.contentBottom) / 2
+        let height = layout.contentTop - layout.caseBottom + m.boardThickness
+        let midY = (layout.contentTop + layout.caseBottom) / 2
         for side: Float in [-1, 1] {
             let panel = ModelEntity(
                 mesh: .generateBox(width: m.boardThickness, height: height, depth: depth),

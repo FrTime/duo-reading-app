@@ -56,7 +56,7 @@ struct ShelfView: View {
             .onAppear { resize(to: proxy.size) }
             .onChange(of: proxy.size) { _, size in resize(to: size) }
         }
-        .background(Color(cgColor: ShelfTextures.wall.darkened(0.45).cgColor))
+        .background { Color(cgColor: ShelfTextures.wall.darkened(0.45).cgColor).ignoresSafeArea() }
         .contentShape(Rectangle())
         .onTapGesture(coordinateSpace: .local) { location in tap(at: location) }
         .gesture(LongPressDragGesture { phase, location in longPress(phase, at: location) })
@@ -161,7 +161,12 @@ struct ShelfView: View {
     }
 
     private func layout(for ids: [UUID]) -> ShelfLayout {
-        ShelfLayout(books: ids.map(spec), mode: mode, shelfWidth: camera.shelfWidth)
+        ShelfLayout(
+            books: ids.map(spec),
+            mode: mode,
+            shelfWidth: camera.shelfWidth,
+            minimumCaseRows: ShelfLayout.rowsToFill(height: camera.halfHeight * 2)
+        )
     }
 
     private var scrollRange: ClosedRange<Float> {

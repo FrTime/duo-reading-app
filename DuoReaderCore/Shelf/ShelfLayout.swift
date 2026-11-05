@@ -34,6 +34,8 @@ public struct ShelfBookSpec: Hashable, Sendable, Identifiable {
 public struct ShelfMetrics: Hashable, Sendable {
     public var bookHeight: Float = 0.24
     public var bookGap: Float = 0.003
+    /// Smallest space between face-out books, so they don't read as tiles.
+    public var coverGap: Float = 0.01
     /// Space above the books on each shelf.
     public var headroom: Float = 0.055
     public var boardThickness: Float = 0.018
@@ -80,9 +82,16 @@ public struct ShelfLayout: Sendable {
     public let mode: ShelfDisplayMode
     public let shelfWidth: Float
     public let slots: [Slot]
+    /// Shelves that hold books.
     public let rowCount: Int
+    /// Shelves the bookcase is built with: the ones holding books, one
+    /// empty one below so scrolling to the end never shows bare wall, and
+    /// enough to fill the screen when there are few books.
+    public let caseRowCount: Int
 
-    public init(books: [ShelfBookSpec], mode: ShelfDisplayMode, shelfWidth: Float, metrics: ShelfMetrics = ShelfMetrics()) {
+    /// `minimumCaseRows` is how many shelves fill the screen; see
+    /// `ShelfLayout.rowsToFill(height:metrics:)`.
+    public init(books: [ShelfBookSpec], mode: ShelfDisplayMode, shelfWidth: Float, minimumCaseRows: Int = 1, metrics: ShelfMetrics = ShelfMetrics()) {
         self.metrics = metrics
         self.mode = mode
         let width = max(shelfWidth, metrics.bookWidth + 2 * metrics.sideMargin)
@@ -101,7 +110,7 @@ public struct ShelfLayout: Sendable {
             gap = metrics.bookGap
         case .covers:
             let perRow = Self.perRow(usable, metrics)
-            gap = max(metrics.bookGap, (usable - perRow * metrics.bookWidth) / perRow)
+            gap = max(metrics.coverGap, (usable - perRow * metrics.bookWidth) / perRow)
         }
         for (index, book) in books.enumerated() {
             let footprint = metrics.footprint(of: book, mode: mode)
@@ -115,11 +124,17 @@ public struct ShelfLayout: Sendable {
         }
         self.slots = slots
         self.rowCount = books.isEmpty ? 1 : row + 1
+        self.caseRowCount = max(rowCount + 1, minimumCaseRows)
+    }
+
+    /// Shelves needed to cover a visible height, plus one spare.
+    public static func rowsToFill(height: Float, metrics: ShelfMetrics = ShelfMetrics()) -> Int {
+        Int((max(height, 0) / metrics.rowHeight).rounded(.up)) + 1
     }
 
     /// Whole face-out books that fit on a shelf.
     private static func perRow(_ usable: Float, _ metrics: ShelfMetrics) -> Float {
-        max(((usable + metrics.bookGap) / (metrics.bookWidth + metrics.bookGap)).rounded(.down), 1)
+        max(((usable + metrics.coverGap) / (metrics.bookWidth + metrics.coverGap)).rounded(.down), 1)
     }
 
     public static func baseY(row: Int, metrics: ShelfMetrics) -> Float {
@@ -131,16 +146,18 @@ public struct ShelfLayout: Sendable {
     /// Bottom of the last board.
     public var contentBottom: Float { Self.baseY(row: rowCount - 1, metrics: metrics) - metrics.boardThickness }
     public var contentHeight: Float { contentTop - contentBottom }
+    /// Bottom of the bookcase's last (possibly empty) board.
+    public var caseBottom: Float { Self.baseY(row: caseRowCount - 1, metrics: metrics) - metrics.boardThickness }
 
     public func slot(for id: UUID) -> Slot? {
         slots.first { $0.id == id }
     }
 
-    /// The shelf a height falls on, clamped to the shelves that exist.
+    /// The shelf a height falls on, clamped to the shelves in the case.
     public func row(atY y: Float) -> Int {
         let fromTop = (metrics.bookHeight + metrics.headroom) - y
         let row = Int((fromTop / metrics.rowHeight).rounded(.down))
-        return min(max(row, 0), rowCount - 1)
+        return min(max(row, 0), caseRowCount - 1)
     }
 
     /// Where a book dropped at (x, y) would go, as an index into the order
