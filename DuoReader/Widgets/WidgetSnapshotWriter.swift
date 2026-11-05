@@ -204,8 +204,8 @@ final class WidgetSnapshotWriter {
             thickness: design.thickness,
             baseColor: design.baseColor,
             spineColor: design.spineColor,
-            frontURL: fm.fileExists(atPath: front.path()) ? front : nil,
-            spineURL: fm.fileExists(atPath: spine.path()) ? spine : nil
+            frontURL: fm.fileExists(atPath: front.path(percentEncoded: false)) ? front : nil,
+            spineURL: fm.fileExists(atPath: spine.path(percentEncoded: false)) ? spine : nil
         )
     }
 }

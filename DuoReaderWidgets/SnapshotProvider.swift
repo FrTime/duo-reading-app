@@ -39,7 +39,7 @@ struct SnapshotProvider: TimelineProvider {
 enum WidgetImages {
     static func image(_ kind: WidgetStore.ImageKind, for id: UUID) -> UIImage? {
         guard let url = WidgetStore.shared()?.imageURL(kind, for: id) else { return nil }
-        return UIImage(contentsOfFile: url.path())
+        return UIImage(contentsOfFile: url.path(percentEncoded: false))
     }
 }
 
