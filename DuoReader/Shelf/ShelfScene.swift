@@ -29,7 +29,7 @@ final class ShelfScene {
     /// The front texture size each book was last loaded at.
     private var frontSizes: [UUID: Int] = [:]
     private var caseKey: CaseKey?
-    private var caseMaterials: (board: PhysicallyBasedMaterial, upright: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: PhysicallyBasedMaterial)?
+    private var caseMaterials: (board: PhysicallyBasedMaterial, upright: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial)?
 
     private struct CaseKey: Equatable {
         var rows: Int
@@ -306,9 +306,8 @@ final class ShelfScene {
         if caseMaterials == nil {
             let board = await ShelfTextures.material(from: ShelfTextures.boardImage(), fallback: ShelfTextures.wood, roughness: 0.45)
             let back = await ShelfTextures.material(from: ShelfTextures.backPanelImage(), fallback: ShelfTextures.wall, roughness: 0.7)
-            let wall = ShelfTextures.solid(ShelfTextures.wall.darkened(0.45), roughness: 0.9)
             let upright = await ShelfTextures.material(from: ShelfTextures.uprightImage(), fallback: ShelfTextures.wood, roughness: 0.45)
-            caseMaterials = (board, upright, back, wall)
+            caseMaterials = (board, upright, back)
         }
         guard let materials = caseMaterials, caseKey == key else { return }
 
@@ -319,10 +318,9 @@ final class ShelfScene {
         let width = layout.shelfWidth
         let depth = m.shelfDepth
 
-        // A wall far behind, so the edges of the scene never show.
-        let wall = ModelEntity(mesh: .generatePlane(width: 40, height: 40), materials: [materials.wall])
-        wall.position = SIMD3(0, (layout.contentTop + layout.caseBottom) / 2, -depth - 0.02)
-        caseRoot.addChild(wall)
+        // No wall: around the case the view's own background shows, which is
+        // the same colour as the SwiftUI views beside it, so there's no seam.
+        // (An unlit wall came out darker after RealityKit's tone mapping.)
 
         for row in 0..<layout.caseRowCount {
             let base = ShelfLayout.baseY(row: row, metrics: m)

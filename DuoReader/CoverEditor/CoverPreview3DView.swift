@@ -73,13 +73,20 @@ final class BookPreviewScene {
         root.addChild(camera)
         ShelfScene.addLights(to: camera, lookingAt: 0.72)
         root.addChild(pivot)
-        // A soft backdrop, so the view never shows an empty void.
+        // A soft, light backdrop, and a floor the book casts its shadow on,
+        // so it reads as an object standing on a table.
         let backdrop = ModelEntity(
             mesh: .generatePlane(width: 20, height: 20),
-            materials: [UnlitMaterial(color: UIColor(cgColor: ShelfTextures.wall.darkened(0.3).cgColor))]
+            materials: [UnlitMaterial(color: UIColor(white: 0.82, alpha: 1))]
         )
         backdrop.position = SIMD3(0, 0, -1.5)
         root.addChild(backdrop)
+        var floorMaterial = PhysicallyBasedMaterial()
+        floorMaterial.baseColor = .init(tint: UIColor(white: 0.86, alpha: 1))
+        floorMaterial.roughness = 0.9
+        let floor = ModelEntity(mesh: .generatePlane(width: 4, depth: 4), materials: [floorMaterial])
+        floor.position = SIMD3(0, -metrics.maxBookHeight / 2 - 0.004, 0)
+        root.addChild(floor)
     }
 
     func show(_ rendered: RenderedCover, thickness: Double, heightScale: Double) async {
@@ -102,6 +109,8 @@ final class BookPreviewScene {
             pivot.addChild(entity)
             book = entity
         }
+        // Stand it on the floor whatever its size.
+        book?.position.y = (metrics.height(of: spec) - metrics.maxBookHeight) / 2
     }
 
     func setRotation(yaw: Float, pitch: Float, animated: Bool) {
