@@ -277,8 +277,7 @@ struct ShelfView: View {
     // MARK: - Gestures
 
     private func bookID(at location: CGPoint) -> UUID? {
-        let point = camera.scenePoint(for: location, atZ: -0.01)
-        return layout(for: order).book(atX: point.x, y: point.y)
+        layout(for: order).book(atScreen: location, camera: camera, specs: spec)
     }
 
     private func tap(at location: CGPoint) {

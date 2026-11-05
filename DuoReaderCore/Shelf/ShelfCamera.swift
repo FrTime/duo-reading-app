@@ -73,6 +73,22 @@ public struct ShelfCamera: Equatable, Sendable {
         )
     }
 
+    /// The screen rectangle a box between two scene corners covers.
+    public func screenBounds(from low: SIMD3<Float>, to high: SIMD3<Float>) -> CGRect {
+        var minX = CGFloat.infinity, minY = CGFloat.infinity
+        var maxX = -CGFloat.infinity, maxY = -CGFloat.infinity
+        for x in [low.x, high.x] {
+            for y in [low.y, high.y] {
+                for z in [low.z, high.z] {
+                    let p = screenPoint(for: SIMD3(x, y, z))
+                    minX = min(minX, p.x); maxX = max(maxX, p.x)
+                    minY = min(minY, p.y); maxY = max(maxY, p.y)
+                }
+            }
+        }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
     /// The range `centerY` may scroll over to show a layout of this height.
     /// When everything fits, the top shelf stays at the top of the screen.
     public static func scrollRange(top: Float, bottom: Float, halfHeight: Float, padding: Float = 0.03) -> ClosedRange<Float> {

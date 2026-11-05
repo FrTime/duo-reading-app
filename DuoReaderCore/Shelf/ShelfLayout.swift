@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import simd
 
@@ -183,6 +184,42 @@ public struct ShelfLayout: Sendable {
         self.slots = slots
         self.rowCount = books.isEmpty ? 1 : row + 1
         self.caseRowCount = max(rowCount + 1, minimumCaseRows)
+    }
+
+    /// The scene box a book fills as it stands on the shelf: spine out, its
+    /// cover width runs back into the case; face out, its thickness does.
+    public func box(of slot: Slot, spec: ShelfBookSpec) -> (low: SIMD3<Float>, high: SIMD3<Float>) {
+        let back: Float = switch mode {
+        case .spines: metrics.width(of: spec) + 0.006
+        case .covers: metrics.depth(of: spec) + 0.01
+        }
+        return (
+            SIMD3(slot.x - slot.footprint / 2, slot.baseY, -back),
+            SIMD3(slot.x + slot.footprint / 2, slot.baseY + slot.height, 0)
+        )
+    }
+
+    /// The book under a screen point: the front face under it if any;
+    /// otherwise any book whose on-screen shape (including the sides that
+    /// perspective shows, as on a lone book at the end of a shelf) or a
+    /// finger-sized strip around a thin spine contains it, nearest first.
+    public func book(atScreen point: CGPoint, camera: ShelfCamera, specs: (UUID) -> ShelfBookSpec, minimumWidth: CGFloat = 44) -> UUID? {
+        let front = camera.scenePoint(for: point, atZ: -0.01)
+        if let exact = book(atX: front.x, y: front.y) { return exact }
+        var best: (id: UUID, distance: CGFloat)?
+        for slot in slots {
+            let (low, high) = box(of: slot, spec: specs(slot.id))
+            var rect = camera.screenBounds(from: low, to: high)
+            if rect.width < minimumWidth {
+                rect = rect.insetBy(dx: (rect.width - minimumWidth) / 2, dy: 0)
+            }
+            guard rect.contains(point) else { continue }
+            let distance = abs(rect.midX - point.x)
+            if best == nil || distance < best!.distance {
+                best = (slot.id, distance)
+            }
+        }
+        return best?.id
     }
 
     /// `x` moved just enough that something `halfExtent` wide either side of

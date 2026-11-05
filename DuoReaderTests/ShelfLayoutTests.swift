@@ -126,6 +126,34 @@ struct ShelfLayoutTests {
         #expect(abs((bottom.y - top.y) - CGFloat(metrics.bookHeight * zoomed.scale)) < 0.5)
     }
 
+    @Test func aLoneBookAnswersAnywhereItShows() throws {
+        // One book at the left end of a wide shelf: perspective shows its
+        // cover side, well to the right of the thin spine.
+        let camera = ShelfCamera(viewSize: CGSize(width: 867, height: 587), centerY: 0.2)
+        let specs = books(1)
+        let layout = ShelfLayout(books: specs, mode: .spines, shelfWidth: camera.shelfWidth)
+        let slot = try #require(layout.slots.first)
+        let (low, high) = layout.box(of: slot, spec: specs[0])
+        let shape = camera.screenBounds(from: low, to: high)
+        let spineRight = camera.screenPoint(for: SIMD3(slot.x + slot.footprint / 2, slot.baseY + slot.height / 2, 0)).x
+        #expect(shape.maxX > spineRight + 10)
+        let onSide = CGPoint(x: shape.maxX - 3, y: shape.midY)
+        #expect(layout.book(atScreen: onSide, camera: camera, specs: { _ in specs[0] }) == slot.id)
+        let farAway = CGPoint(x: shape.maxX + 200, y: shape.midY)
+        #expect(layout.book(atScreen: farAway, camera: camera, specs: { _ in specs[0] }) == nil)
+    }
+
+    @Test func thinSpinesGetAFingerSizedTarget() throws {
+        let camera = ShelfCamera(viewSize: CGSize(width: 400, height: 700), centerY: 0.2)
+        let specs = [ShelfBookSpec(id: UUID(), thickness: 0.04)]
+        let layout = ShelfLayout(books: specs, mode: .covers, shelfWidth: camera.shelfWidth)
+        let slot = try #require(layout.slots.first)
+        let centre = camera.screenPoint(for: SIMD3(slot.x, slot.baseY + slot.height / 2, 0))
+        // Covers mode is wide anyway; just make sure a point beside the
+        // front still finds it within the minimum width.
+        #expect(layout.book(atScreen: centre, camera: camera, specs: { _ in specs[0] }) == slot.id)
+    }
+
     @Test func thickerBooksTakeMoreRoom() {
         let thin = ShelfBookSpec(id: UUID(), thickness: 0.05)
         let thick = ShelfBookSpec(id: UUID(), thickness: 0.3)
