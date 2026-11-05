@@ -89,7 +89,7 @@ struct ReaderSearchView: View {
                         .padding(.bottom, 8)
                         .onAppear { fieldFocused = true }
                 }
-                results
+                resultsList
             }
             .modifier(SystemSearchField(isEnabled: onDone == nil, query: $query, onSubmit: runSearch))
             .onChange(of: query) { _, text in
@@ -101,7 +101,7 @@ struct ReaderSearchView: View {
     }
 
     @ViewBuilder
-    private var results: some View {
+    private var resultsList: some View {
         if isSearching {
             ProgressView("Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -171,6 +171,7 @@ private struct SystemSearchField: ViewModifier {
     @Binding var query: String
     let onSubmit: () -> Void
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         if isEnabled {
             content
