@@ -71,3 +71,47 @@ extension PageTurnStyle {
         }
     }
 }
+
+extension PageTurn {
+    /// Whether the turn reveals the page on the right, which decides which
+    /// edge a curl starts from.
+    public func revealsRight(rightToLeft: Bool) -> Bool {
+        isForward(rightToLeft: rightToLeft) != rightToLeft
+    }
+}
+
+/// How a page turn is drawn, and whether the reader's own swipe recognisers
+/// replace Readium's swipe paging.
+public struct TurnPlan: Equatable, Sendable {
+    public enum Animation: Equatable, Sendable {
+        /// Readium turns the page itself, sliding or instantly.
+        case native(animated: Bool)
+        /// The reader snapshots the page and curls it away.
+        case curl
+        /// The reader snapshots the page and fades it out.
+        case fade
+    }
+
+    public var animation: Animation
+    /// True when Readium's swipe paging is off and the reader's swipes turn
+    /// pages, so every turn uses the chosen style.
+    public var ownsSwipes: Bool
+
+    public init(style: PageTurnStyle, flow: ReaderFlow, isReflowable: Bool, reduceMotion: Bool) {
+        let style = style.effective(reduceMotion: reduceMotion)
+        // Curl and fade need whole pages: reflowable books in paged flow.
+        // Scrolling books and PDFs use Readium's own animation.
+        let drawsTurns = flow == .paged && isReflowable
+        ownsSwipes = drawsTurns && style != .slide
+        switch style {
+        case .curl where drawsTurns:
+            animation = .curl
+        case .fade where drawsTurns:
+            animation = .fade
+        case .none:
+            animation = .native(animated: false)
+        default:
+            animation = .native(animated: true)
+        }
+    }
+}

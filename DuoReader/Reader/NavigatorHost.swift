@@ -31,6 +31,10 @@ final class ReaderPageViewController: UIViewController {
     private let model: ReaderModel
     private var tapObserver: InputObservableToken?
     private var isTurning = false
+    private var accessibilityObservers: [NSObjectProtocol] = []
+    /// The last plan applied, so SwiftUI updates that don't change it skip
+    /// the view-tree walk.
+    private var appliedPlan: TurnPlan?
     private lazy var swipeLeft = makeSwipe(.left)
     private lazy var swipeRight = makeSwipe(.right)
 
@@ -73,59 +77,108 @@ final class ReaderPageViewController: UIViewController {
             let zone = TapZone(point: event.location, in: navigator.view.bounds, edgeFraction: Self.edgeZoneFraction)
             switch TapAction(zone: zone, mode: self.model.settings.tapZones) {
             case .turn(let turn):
-                await self.turn(turn)
+                // A tap during a turn animation is left unhandled, not lost.
+                return await self.turn(turn)
             case .toggleControls:
                 self.model.isChromeVisible.toggle()
+                return true
             }
-            return true
         })
 
+        // Readium makes new web views as pages change and when settings are
+        // re-applied; they arrive with swipe paging on.
         model.onLocationChange = { [weak self] in self?.updateNativePaging() }
-        settingsDidChange()
+        model.onSettingsApplied = { [weak self] in self?.updateNativePaging() }
+
+        let center = NotificationCenter.default
+        for name in [UIAccessibility.reduceMotionStatusDidChangeNotification, UIAccessibility.voiceOverStatusDidChangeNotification] {
+            accessibilityObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateNativePaging() }
+            })
+        }
+        updateNativePaging()
+    }
+
+    isolated deinit {
+        if let tapObserver { model.navigator?.removeObserver(tapObserver) }
+        model.onLocationChange = nil
+        model.onSettingsApplied = nil
+        for observer in accessibilityObservers { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // A fold or resize can make Readium rebuild its pages.
+        updateNativePaging()
     }
 
     /// Re-applies anything that depends on the settings.
     func settingsDidChange() {
+        guard currentPlan != appliedPlan else { return }
         updateNativePaging()
+    }
+
+    private var currentPlan: TurnPlan {
+        TurnPlan(
+            style: model.settings.pageTurn,
+            flow: model.settings.flow,
+            isReflowable: model.isReflowable,
+            reduceMotion: UIAccessibility.isReduceMotionEnabled
+        )
     }
 
     // MARK: - Turning
 
-    /// Turns the page with the current animation style.
-    func turn(_ turn: PageTurn) async {
-        guard !isTurning, let navigator = model.navigator else { return }
-        let style = model.settings.pageTurn.effective(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+    /// Turns the page with the current animation style. Returns false when
+    /// the tap wasn't used: mid-animation, or with no navigator.
+    @discardableResult
+    func turn(_ turn: PageTurn) async -> Bool {
+        guard !isTurning, let navigator = model.navigator else { return false }
+        let plan = currentPlan
 
-        // Scrolling books and PDFs keep the navigator's own animation.
-        guard model.settings.flow == .paged, model.isReflowable, style == .curl || style == .fade else {
-            _ = await model.turn(turn, animated: style == .slide)
-            return
+        guard plan.animation == .curl || plan.animation == .fade else {
+            if !(await model.turn(turn, animated: plan.animation == .native(animated: true))) {
+                signalEdge(of: turn)
+            }
+            return true
         }
 
         isTurning = true
         defer { isTurning = false }
 
         guard let before = navigator.view.snapshotView(afterScreenUpdates: false) else {
-            _ = await model.turn(turn, animated: false)
-            return
+            if !(await model.turn(turn, animated: false)) { signalEdge(of: turn) }
+            return true
         }
         before.frame = navigator.view.frame
+        before.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(before)
 
         guard await model.turn(turn, animated: false) else {
             before.removeFromSuperview()
-            return
+            signalEdge(of: turn)
+            return true
         }
         // Give the web view a frame to draw the new page under the snapshot.
         try? await Task.sleep(for: .milliseconds(40))
 
-        let forward = turn.isForward(rightToLeft: model.isRightToLeft)
-        switch style {
-        case .curl:
-            await curl(away: before, forward: forward)
-        default:
+        if plan.animation == .curl {
+            await curl(away: before, towardRight: turn.revealsRight(rightToLeft: model.isRightToLeft))
+        } else {
             await fade(away: before)
         }
+        return true
+    }
+
+    /// At the first or last page, a light bump and a spoken note instead of
+    /// silence.
+    private func signalEdge(of turn: PageTurn) {
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        let atEnd = turn.isForward(rightToLeft: model.isRightToLeft)
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: atEnd ? String(localized: "End of book") : String(localized: "Start of book")
+        )
     }
 
     private func fade(away snapshot: UIView) async {
@@ -139,9 +192,9 @@ final class ReaderPageViewController: UIViewController {
         }
     }
 
-    /// Curls the old page off like a book page: from the right edge going
-    /// forward, back in from the left going backward.
-    private func curl(away snapshot: UIView, forward: Bool) async {
+    /// Curls the old page off like a paper page: from the right edge when the
+    /// next page is on the right, from the left edge otherwise.
+    private func curl(away snapshot: UIView, towardRight: Bool) async {
         guard let navigator = model.navigator,
               let after = navigator.view.snapshotView(afterScreenUpdates: true) else {
             snapshot.removeFromSuperview()
@@ -150,6 +203,7 @@ final class ReaderPageViewController: UIViewController {
         let pages = UIPageViewController(transitionStyle: .pageCurl, navigationOrientation: .horizontal)
         pages.isDoubleSided = false
         pages.view.frame = navigator.view.frame
+        pages.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         pages.view.isUserInteractionEnabled = false
         pages.setViewControllers([SnapshotPage(snapshot)], direction: .forward, animated: false)
         addChild(pages)
@@ -157,7 +211,7 @@ final class ReaderPageViewController: UIViewController {
         pages.didMove(toParent: self)
 
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            pages.setViewControllers([SnapshotPage(after)], direction: forward ? .forward : .reverse, animated: true) { _ in
+            pages.setViewControllers([SnapshotPage(after)], direction: towardRight ? .forward : .reverse, animated: true) { _ in
                 done.resume()
             }
         }
@@ -187,12 +241,14 @@ final class ReaderPageViewController: UIViewController {
     /// and our own swipe recognisers take over.
     private func updateNativePaging() {
         guard let navigator = model.navigator, isViewLoaded else { return }
-        let style = model.settings.pageTurn.effective(reduceMotion: UIAccessibility.isReduceMotionEnabled)
-        let ownsSwipes = model.isReflowable && model.settings.flow == .paged && style != .slide
-        swipeLeft.isEnabled = ownsSwipes
-        swipeRight.isEnabled = ownsSwipes
-        NativePaging.setEnabled(!ownsSwipes, in: navigator.view)
+        let plan = currentPlan
+        appliedPlan = plan
+        swipeLeft.isEnabled = plan.ownsSwipes
+        swipeRight.isEnabled = plan.ownsSwipes
+        nativePaging.setEnabled(!plan.ownsSwipes, in: navigator.view)
     }
+
+    private let nativePaging = NativePaging()
 }
 
 /// Switches the swipe-to-page scrolling inside a Readium navigator on or off.
@@ -201,10 +257,20 @@ final class ReaderPageViewController: UIViewController {
 /// paging scroll views (the spread pager and each page's web view). It runs
 /// again after each page change, because Readium creates web views as it goes.
 @MainActor
-enum NativePaging {
-    static func setEnabled(_ enabled: Bool, in root: UIView) {
-        for scrollView in pagingScrollViews(in: root) {
-            scrollView.panGestureRecognizer.isEnabled = enabled
+final class NativePaging {
+    /// Pans this switched off, remembered so they come back on even if
+    /// Readium has since turned paging off on their scroll view.
+    private let disabled = NSHashTable<UIPanGestureRecognizer>.weakObjects()
+
+    func setEnabled(_ enabled: Bool, in root: UIView) {
+        if enabled {
+            for pan in disabled.allObjects { pan.isEnabled = true }
+            disabled.removeAllObjects()
+        } else {
+            for scrollView in Self.pagingScrollViews(in: root) where scrollView.panGestureRecognizer.isEnabled {
+                scrollView.panGestureRecognizer.isEnabled = false
+                disabled.add(scrollView.panGestureRecognizer)
+            }
         }
     }
 

@@ -67,14 +67,19 @@ public struct ReaderLayout: Equatable, Sendable {
 
         if fold.height >= fold.width {
             // Book: the fold runs top to bottom.
-            let leading = CGRect(x: 0, y: 0, width: fold.minX, height: size.height)
-            let trailing = CGRect(x: fold.maxX, y: 0, width: max(0, size.width - fold.maxX), height: size.height)
+            let left = CGRect(x: 0, y: 0, width: fold.minX, height: size.height)
+            let right = CGRect(x: fold.maxX, y: 0, width: max(0, size.width - fold.maxX), height: size.height)
             if flow == .paged, spread != .single {
-                return ReaderLayout(pose: .book, pageFrame: bounds, controlsFrame: nil, columns: 2, foldWidth: fold.width)
+                // Readium splits a spread down its middle, so centre the page
+                // view on the fold, even when the fold is off centre.
+                let half = min(fold.midX, size.width - fold.midX)
+                let spread = CGRect(x: fold.midX - half, y: 0, width: 2 * half, height: size.height)
+                return ReaderLayout(pose: .book, pageFrame: spread, controlsFrame: nil, columns: 2, foldWidth: fold.width)
             }
-            // One page (scrolling, or the reader asked for one): keep it on
-            // the leading side and give the other side to the controls.
-            return ReaderLayout(pose: .book, pageFrame: leading, controlsFrame: trailing, columns: 1, foldWidth: 0)
+            // One page (scrolling, or the reader asked for one): it goes on
+            // the left half and the controls on the right. Left, not leading,
+            // because the halves are physical screen panels.
+            return ReaderLayout(pose: .book, pageFrame: left, controlsFrame: right, columns: 1, foldWidth: 0)
         }
 
         // Tabletop: the fold runs side to side.

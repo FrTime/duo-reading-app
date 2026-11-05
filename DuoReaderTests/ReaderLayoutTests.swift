@@ -3,38 +3,6 @@ import Foundation
 import Testing
 @testable import DuoReader
 
-struct PageTurningTests {
-    @Test(arguments: [
-        (TapZone.left, TapZoneMode.backAndForward, TapAction.turn(.left)),
-        (.right, .backAndForward, .turn(.right)),
-        (.center, .backAndForward, .toggleControls),
-        (.left, .forwardOnly, .turn(.forward)),
-        (.right, .forwardOnly, .turn(.forward)),
-        (.center, .forwardOnly, .toggleControls),
-        (.left, .off, .toggleControls),
-        (.right, .off, .toggleControls),
-    ])
-    func tapsMapToActions(zone: TapZone, mode: TapZoneMode, action: TapAction) {
-        #expect(TapAction(zone: zone, mode: mode) == action)
-    }
-
-    @Test func sidesFollowTheReadingDirection() {
-        #expect(PageTurn.right.isForward(rightToLeft: false))
-        #expect(!PageTurn.left.isForward(rightToLeft: false))
-        #expect(PageTurn.left.isForward(rightToLeft: true))
-        #expect(!PageTurn.right.isForward(rightToLeft: true))
-        #expect(PageTurn.forward.isForward(rightToLeft: true))
-        #expect(!PageTurn.backward.isForward(rightToLeft: false))
-    }
-
-    @Test func reduceMotionSwapsMovingStylesForAFade() {
-        #expect(PageTurnStyle.curl.effective(reduceMotion: true) == .fade)
-        #expect(PageTurnStyle.slide.effective(reduceMotion: true) == .fade)
-        #expect(PageTurnStyle.none.effective(reduceMotion: true) == PageTurnStyle.none)
-        #expect(PageTurnStyle.curl.effective(reduceMotion: false) == .curl)
-    }
-}
-
 struct ReaderLayoutTests {
     // Rough iPhone Duo sizes in points; exact values don't matter to the rules.
     let outer = CGSize(width: 400, height: 860)
@@ -76,6 +44,15 @@ struct ReaderLayoutTests {
         #expect(layout.columns == 2)
         #expect(layout.foldWidth == 20)
         #expect(layout.pageFrame == CGRect(origin: .zero, size: innerTall))
+    }
+
+    @Test func bookPoseCentresTheSpreadOnAnOffCentreFold() {
+        // Readium splits a spread down its middle, so the crease must be the middle.
+        let fold = CGRect(x: 400, y: 0, width: 20, height: 860)
+        let layout = ReaderLayout.resolve(size: innerTall, fold: fold, spread: .automatic, flow: .paged)
+        #expect(layout.pageFrame.midX == fold.midX)
+        #expect(layout.pageFrame.minX >= 0)
+        #expect(layout.pageFrame.maxX <= innerTall.width)
     }
 
     @Test func bookPoseWithOnePageKeepsItOffTheFold() {

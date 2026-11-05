@@ -210,8 +210,9 @@ final class ReaderModel {
         case let pdf as PDFNavigatorViewController:
             pdf.submitPreferences(pdfPreferences)
         default:
-            break
+            return
         }
+        onSettingsApplied?()
     }
 
     // MARK: - Turning pages
@@ -219,6 +220,8 @@ final class ReaderModel {
     /// Called after every position change, e.g. so the page host can re-apply
     /// settings to web views Readium created for the new page.
     @ObservationIgnored var onLocationChange: (@MainActor () -> Void)?
+    /// Called after settings reach the navigator, which may rebuild its pages.
+    @ObservationIgnored var onSettingsApplied: (@MainActor () -> Void)?
 
     /// Whether the book reads right to left, which flips which side is "next".
     var isRightToLeft: Bool {

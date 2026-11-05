@@ -10,6 +10,7 @@ struct ReaderSettingsView: View {
     /// PDFs keep their own typography, so only colour and layout show for them.
     var isReflowable = true
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
@@ -170,7 +171,7 @@ struct ReaderSettingsView: View {
         } header: {
             Text("Page Turning")
         } footer: {
-            if UIAccessibility.isReduceMotionEnabled, settings.pageTurn == .slide || settings.pageTurn == .curl {
+            if reduceMotion, settings.pageTurn == .slide || settings.pageTurn == .curl {
                 Text("Reduce Motion is on, so pages fade instead.")
             } else if !isReflowable, settings.pageTurn == .curl || settings.pageTurn == .fade {
                 Text("PDFs slide between pages.")
