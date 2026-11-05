@@ -17,11 +17,13 @@ final class ImportController {
         importer = LibraryImporter(modelContainer: container, booksFolder: booksFolder)
     }
 
-    /// Types offered in the document picker.
+    /// Types offered in the document picker. ZIPs are included because books
+    /// are often shared zipped (`.fb2.zip`, comics); the importer looks inside
+    /// and explains when a ZIP isn't a book.
     static var allowedContentTypes: [UTType] {
         LibraryImporter.supportedFormats
             .flatMap(\.fileExtensions)
-            .compactMap { UTType(filenameExtension: $0) }
+            .compactMap { UTType(filenameExtension: $0) } + [.zip]
     }
 
     func importFiles(_ urls: [URL]) {
