@@ -120,6 +120,17 @@ struct HTMLConverterTests {
 
 @MainActor
 struct HTMLImportTests {
+    @Test func htmlHasALowerSizeCap() async throws {
+        let url = Fixtures.temporaryURL("huge.html")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: url.path(), contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(BookConverters.maxHTMLBytes + 1))
+        try handle.close()
+        #expect(BookConverters.maxHTMLBytes < BookConverters.maxSourceBytes)
+        await #expect(throws: ConversionError.tooLarge) { try await HTMLConverter().document(from: url) }
+    }
+
     @Test func importsAnAO3HTMLDownload() async throws {
         let container = try LibraryStore.makeContainer(inMemory: true)
         let importer = LibraryImporter(modelContainer: container, booksFolder: Fixtures.temporaryURL("Books"))

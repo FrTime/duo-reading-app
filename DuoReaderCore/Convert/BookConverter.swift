@@ -16,6 +16,9 @@ public enum ConversionError: Error, Equatable {
 public enum BookConverters {
     /// Text formats are small; anything this big is almost certainly not a book.
     public static let maxSourceBytes = 50 * 1024 * 1024
+    /// HTML is parsed into a full DOM, which takes several times the file
+    /// size in memory, so it gets a lower cap. A 500k-word AO3 work is ~5 MB.
+    public static let maxHTMLBytes = 20 * 1024 * 1024
 
     /// The converter for a format, or nil when it's read natively or not supported yet.
     public static func converter(for format: BookFormat) -> (any BookConverter)? {
@@ -28,12 +31,12 @@ public enum BookConverters {
         }
     }
 
-    /// Reads the file, refusing anything over `maxSourceBytes`.
-    static func readSource(_ url: URL) throws -> Data {
+    /// Reads the file, refusing anything over `limit`.
+    static func readSource(_ url: URL, limit: Int = maxSourceBytes) throws -> Data {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size <= maxSourceBytes else { throw ConversionError.tooLarge }
+        guard size <= limit else { throw ConversionError.tooLarge }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard data.count <= maxSourceBytes else { throw ConversionError.tooLarge }
+        guard data.count <= limit else { throw ConversionError.tooLarge }
         return data
     }
 

@@ -12,7 +12,7 @@ public struct HTMLConverter: BookConverter {
     public init() {}
 
     public func document(from url: URL) async throws -> EPUBDocument {
-        let html = try BookConverters.decodeText(BookConverters.readSource(url))
+        let html = try BookConverters.decodeText(BookConverters.readSource(url, limit: BookConverters.maxHTMLBytes))
         do {
             return try Self.document(fromHTML: html, fallbackTitle: BookConverters.title(for: url))
         } catch let error as ConversionError {
