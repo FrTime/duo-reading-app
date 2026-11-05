@@ -32,6 +32,33 @@ final class ReaderModel {
     /// A web or mail link the reader tapped, waiting for confirmation.
     var pendingExternalURL: URL?
 
+    /// The reading settings. Changing them saves them and restyles the page.
+    var settings: ReaderSettings {
+        didSet {
+            guard settings != oldValue else { return }
+            scheduleSettingsUpdate()
+        }
+    }
+
+    /// Whether the system is in Dark Mode, which picks the dark theme when the
+    /// settings follow the system.
+    var systemIsDark = false {
+        didSet {
+            if systemIsDark != oldValue { applySettings() }
+        }
+    }
+
+    /// The page and text colours in effect.
+    var palette: ReaderPalette {
+        settings.colors(for: settings.effectiveTheme(systemIsDark: systemIsDark))
+    }
+
+    /// Whether the book reflows (EPUB). PDFs have fixed pages.
+    var isReflowable: Bool {
+        guard let publication else { return true }
+        return publication.metadata.layout != .fixed && !publication.conforms(to: .pdf)
+    }
+
     /// How far through the book the current page is, from 0 to 1.
     private(set) var progression: Double?
     /// The chapter title at the current position, when the book has one.
@@ -42,15 +69,24 @@ final class ReaderModel {
 
     @ObservationIgnored private let booksFolder: URL
     @ObservationIgnored private let loader: PublicationLoader
+    @ObservationIgnored private let settingsStore: ReaderSettingsStore
     @ObservationIgnored private var modelContext: ModelContext?
     @ObservationIgnored private lazy var saveThrottle = SaveThrottle { [weak self] in self?.save() }
     @ObservationIgnored private var delegateBridge: NavigatorDelegateBridge?
     @ObservationIgnored private var isClosed = false
+    @ObservationIgnored private var settingsUpdate: Task<Void, Never>?
 
-    init(book: Book, booksFolder: URL, loader: PublicationLoader = .shared) {
+    init(
+        book: Book,
+        booksFolder: URL,
+        loader: PublicationLoader = .shared,
+        settingsStore: ReaderSettingsStore = ReaderSettingsStore()
+    ) {
         self.book = book
         self.booksFolder = booksFolder
         self.loader = loader
+        self.settingsStore = settingsStore
+        settings = settingsStore.load()
         progression = book.progress
     }
 
@@ -85,12 +121,14 @@ final class ReaderModel {
                 navigator = try PDFNavigatorViewController(
                     publication: publication,
                     initialLocation: initialLocation,
+                    config: PDFNavigatorViewController.Configuration(preferences: pdfPreferences),
                     delegate: bridge
                 )
             } else {
                 let epub = try EPUBNavigatorViewController(
                     publication: publication,
-                    initialLocation: initialLocation
+                    initialLocation: initialLocation,
+                    config: EPUBNavigatorViewController.Configuration(preferences: epubPreferences)
                 )
                 epub.delegate = bridge
                 navigator = epub
@@ -116,6 +154,7 @@ final class ReaderModel {
     func close() {
         guard !isClosed else { return }
         isClosed = true
+        if settingsUpdate != nil { commitSettings() }
         saveThrottle.flush()
         navigator = nil
         publication = nil
@@ -124,7 +163,54 @@ final class ReaderModel {
 
     /// Saves now, e.g. when the app moves to the background.
     func flush() {
+        if settingsUpdate != nil { commitSettings() }
         saveThrottle.flush()
+    }
+
+    // MARK: - Settings
+
+    private var epubPreferences: EPUBPreferences {
+        ReadiumPreferences.epub(
+            settings,
+            systemIsDark: systemIsDark,
+            columns: settings.spread.columnCount,
+            spread: settings.spread.pdfSpread
+        )
+    }
+
+    private var pdfPreferences: PDFPreferences {
+        ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: settings.spread.pdfSpread)
+    }
+
+    /// Saves and applies settings shortly after the last change, so dragging
+    /// a slider doesn't re-paginate the book on every tick.
+    private func scheduleSettingsUpdate() {
+        settingsUpdate?.cancel()
+        settingsUpdate = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self else { return }
+            self.commitSettings()
+        }
+    }
+
+    /// Saves and applies any settings change still waiting.
+    func commitSettings() {
+        settingsUpdate?.cancel()
+        settingsUpdate = nil
+        settingsStore.save(settings)
+        applySettings()
+    }
+
+    /// Pushes the current settings to the navigator.
+    private func applySettings() {
+        switch navigator {
+        case let epub as EPUBNavigatorViewController:
+            epub.submitPreferences(epubPreferences)
+        case let pdf as PDFNavigatorViewController:
+            pdf.submitPreferences(pdfPreferences)
+        default:
+            break
+        }
     }
 
     // MARK: - Turning pages
@@ -204,5 +290,23 @@ private final class NavigatorDelegateBridge: EPUBNavigatorDelegate, PDFNavigator
 
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
         RemoteContentBlocker.install(in: userContentController)
+    }
+}
+
+extension ReaderSpread {
+    var columnCount: ColumnCount {
+        switch self {
+        case .automatic: .auto
+        case .single: .one
+        case .double: .two
+        }
+    }
+
+    var pdfSpread: Spread {
+        switch self {
+        case .automatic: .auto
+        case .single: .never
+        case .double: .always
+        }
     }
 }

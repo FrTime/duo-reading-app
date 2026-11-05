@@ -11,6 +11,8 @@ struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var showingSettings = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -23,10 +25,23 @@ struct ReaderView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .toolbarVisibility(chromeVisibility, for: .navigationBar, .bottomBar)
+                .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
+                .background(pageColor.ignoresSafeArea())
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
-        .task { await model.load(in: modelContext) }
+        .sheet(isPresented: $showingSettings) {
+            ReaderSettingsView(settings: $model.settings, isReflowable: model.isReflowable)
+                .presentationDetents([.medium, .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        }
+        .task {
+            model.systemIsDark = colorScheme == .dark
+            await model.load(in: modelContext)
+        }
+        .onChange(of: colorScheme) { _, scheme in
+            model.systemIsDark = scheme == .dark
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.flush() }
         }
@@ -50,6 +65,14 @@ struct ReaderView: View {
         }
     }
 
+    private var pageColor: Color {
+        Color(uiColor: model.palette.background.uiColor)
+    }
+
+    private var pageColorScheme: ColorScheme {
+        model.palette.isDark ? .dark : .light
+    }
+
     private var chromeVisibility: Visibility {
         model.isChromeVisible || model.state != .ready ? .visible : .hidden
     }
@@ -60,6 +83,7 @@ struct ReaderView: View {
         case .loading:
             ProgressView("Opening \(model.book.title)…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
         case .failed(let error):
             ContentUnavailableView {
                 Label(String(localized: error.title), systemImage: "book.closed")
@@ -97,6 +121,14 @@ struct ReaderView: View {
             } label: {
                 Label("Close", systemImage: "xmark")
             }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showingSettings = true
+            } label: {
+                Label("Reading Settings", systemImage: "textformat.size")
+            }
+            .disabled(model.state != .ready)
         }
         ToolbarItem(placement: .bottomBar) {
             ReaderProgressLabel(
