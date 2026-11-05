@@ -173,8 +173,9 @@ enum MOBIFixture {
     /// An INDX index: a header record with TAGX, then one data record.
     static func index(tags: [(UInt8, UInt8, UInt8, UInt8)], entries: [(String, UInt8, [Int])]) -> [Data] {
         func indxHeader(start: UInt32, count: UInt32) -> Data {
-            Data("INDX".utf8) + be32(56) + be32(0) + be32(0) + be32(0) + be32(start) + be32(count)
-                + be32(65001) + be32(0xFFFF_FFFF) + be32(UInt32(entries.count)) + be32(0) + be32(0) + be32(0) + be32(0)
+            // len, nul, type, gen, IDXT start, count, encoding, language, total, ordt, ligt, nligt, nctoc
+            let fields: [UInt32] = [56, 0, 0, 0, start, count, 65001, 0xFFFF_FFFF, UInt32(entries.count), 0, 0, 0, 0]
+            return fields.reduce(Data("INDX".utf8)) { $0 + be32($1) }
         }
         let rows = (tags + [(0, 0, 0, 1)]).reduce(Data()) { $0 + Data([$1.0, $1.1, $1.2, $1.3]) }
         let tagx = Data("TAGX".utf8) + be32(UInt32(12 + rows.count)) + be32(1) + rows
