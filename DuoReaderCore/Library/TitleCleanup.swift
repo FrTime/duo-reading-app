@@ -29,10 +29,7 @@ extension Book {
     /// The title from the file name as it was, with only the extension and
     /// underscores removed. What "Use File Name" puts back.
     public var plainFileNameTitle: String {
-        let name = FileNameTitleParser.stripExtension(titleSourceName)
-            .replacingOccurrences(of: "_", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? String(localized: "Untitled") : name
+        FileNameTitleParser.plainTitle(fromFileName: titleSourceName)
     }
 
     /// The cleaned-up title, series and number for this book's file name,
@@ -46,8 +43,15 @@ extension Book {
     ///
     /// Only for titles that still look like they came from the file name: a
     /// title from the file's metadata, or one the user typed, is left alone.
+    /// Books imported before file names were kept can't be checked that way,
+    /// so they're only offered when the file gave no author or series either,
+    /// as with a comic that had no ComicInfo.xml.
     public var suggestedTitleCleanup: TitleCleanup? {
-        if originalFileName != nil, title != plainFileNameTitle { return nil }
+        if originalFileName != nil {
+            guard title == plainFileNameTitle else { return nil }
+        } else {
+            guard authors.isEmpty, series == nil else { return nil }
+        }
         let cleanup = cleanedTitle
         let addsSeries = series == nil && cleanup.series != nil
         guard cleanup.title != title || addsSeries else { return nil }

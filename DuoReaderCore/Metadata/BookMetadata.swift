@@ -70,9 +70,6 @@ extension BookMetadata {
     /// A title for files with no metadata: the file name without its extension,
     /// with underscores turned into spaces.
     public static func fallbackTitle(for url: URL) -> String {
-        let name = url.deletingPathExtension().lastPathComponent
-            .replacingOccurrences(of: "_", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? String(localized: "Untitled") : name
+        FileNameTitleParser.plainTitle(fromFileName: url.lastPathComponent)
     }
 }

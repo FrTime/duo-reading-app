@@ -26,6 +26,9 @@ struct FileNameTitleTests {
         Case(fileName: "Some_Comic.cbz", title: "Some Comic"),
         Case(fileName: "Catch 22.pdf", title: "Catch 22"),
         Case(fileName: "[Only Tags].cbz", title: "Only Tags"),
+        Case(fileName: "Charlotte's Web.epub", title: "Charlotte's Web"),
+        Case(fileName: "Born Digital.pdf", title: "Born Digital"),
+        Case(fileName: "OnePiece.Ch.1001.5.cbz", title: "OnePiece, Ch. 1001.5", series: "OnePiece", index: 1001.5),
     ])
     func parses(_ example: Case) {
         let parsed = FileNameTitle(fileName: example.fileName)
@@ -42,6 +45,12 @@ struct FileNameTitleTests {
         let once = FileNameTitle(fileName: "Claymore v15 (2009) (Digital).cbz")
         #expect(FileNameTitle(fileName: once.title) == FileNameTitle(fileName: "Claymore v15"))
         #expect(FileNameTitle(fileName: once.title).title == once.title)
+    }
+
+    @Test func numbersAreWrittenTheSameInEveryLocale() {
+        #expect(FileNameTitleParser.number(10.5) == "10.5")
+        #expect(FileNameTitleParser.number(1234.5) == "1234.5")
+        #expect(FileNameTitleParser.number(15) == "15")
     }
 
     @Test func onlyKnownExtensionsAreDropped() {
@@ -89,6 +98,12 @@ struct TitleCleanupTests {
         #expect(tidy.suggestedTitleCleanup == nil)
     }
 
+    @Test func olderBooksWithAnAuthorAreNotOffered() {
+        let book = book(title: "Dune (Dune Chronicles, Book 1)")
+        book.authors = ["Frank Herbert"]
+        #expect(book.suggestedTitleCleanup == nil)
+    }
+
     @Test func keepsASeriesTheBookAlreadyHas() {
         let book = book(title: "Berserk v01 (Digital)", series: "Berserk Deluxe")
         book.seriesIndex = 7
@@ -121,6 +136,16 @@ struct ComicFileNameImportTests {
         #expect(book.seriesIndex == 15)
         #expect(book.originalFileName == name)
         #expect(book.suggestedTitleCleanup == nil)
+    }
+
+    @Test func comicInfoNumberIsKeptWhenOnlyTheSeriesComesFromTheFileName() async throws {
+        let info = Data("<?xml version=\"1.0\"?><ComicInfo><Number>12</Number></ComicInfo>".utf8)
+        let source = try await ComicConverterTests.zip([("001.png", ComicConverterTests.page1), ("ComicInfo.xml", info)], name: "Saga 004.cbz")
+        let output = source.deletingLastPathComponent().appending(path: "out.epub")
+        try await ComicConverter().convert(source, to: output)
+        let metadata = try await EPUBMetadataReader().readMetadata(from: output)
+        #expect(metadata.series == "Saga")
+        #expect(metadata.seriesIndex == 12)
     }
 
     @Test func comicInfoStillWinsOverTheFileName() async throws {

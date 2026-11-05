@@ -42,17 +42,26 @@ enum FileNameTitleParser {
         .union(["zip", "rar", "7z", "cb7", "cbt", "tar"])
 
     /// Release tags that sometimes appear outside brackets at the end of a name.
+    /// Only words that are never the end of a real title, so "Charlotte's
+    /// Web" or "Born Digital" keep their last word. Tags such as "(Digital)"
+    /// are usually bracketed, and brackets are removed separately.
     static let trailingTags: Set<String> = [
-        "digital", "hq", "lq", "hd", "web", "webrip", "web-dl", "scan", "scans", "scanned",
-        "c2c", "raw", "raws", "eng", "english", "colored", "colour", "color", "repack", "fixed",
+        "hq", "lq", "webrip", "web-dl", "c2c", "scans", "scanlation", "repack",
     ]
 
     static func parse(_ fileName: String) -> FileNameTitle {
         var text = stripExtension(fileName.trimmingCharacters(in: .whitespacesAndNewlines))
         text = text.replacingOccurrences(of: "_", with: " ")
         // "Berserk.v01.c003" uses dots for spaces.
+        // Decimal points ("Ch.12.5") are kept.
         if !text.contains(" "), text.filter({ $0 == "." }).count >= 2 {
-            text = text.replacingOccurrences(of: ".", with: " ")
+            let characters = Array(text)
+            text = String(characters.indices.map { i -> Character in
+                guard characters[i] == "." else { return characters[i] }
+                let between = i > 0 && i < characters.count - 1
+                    && characters[i - 1].isNumber && characters[i + 1].isNumber
+                return between ? "." : " "
+            })
         }
 
         // Bracketed groups are release tags: scanlator, year, source, quality.
@@ -124,31 +133,44 @@ enum FileNameTitleParser {
         return title.isEmpty ? String(localized: "Untitled") : title
     }
 
-    /// "015" reads as 15 and "10.5" stays 10.5.
+    /// "015" reads as 15 and "10.5" stays 10.5, in every locale: the result
+    /// is also written to the EPUB as `calibre:series_index`.
     static func number(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : value.formatted(.number.precision(.fractionLength(0...2)))
+        value.rounded() == value ? String(Int(value)) : String(value)
     }
 
     // MARK: - Patterns
 
     /// `[...]`, `(...)` or `{...}`, capturing what's inside.
-    nonisolated(unsafe) static let bracketGroup = /[\[\(\{]([^\[\]\(\)\{\}]*)[\]\)\}]/
-    nonisolated(unsafe) static let yearPattern = /(?:19|20)\d\d/
+    static var bracketGroup: Regex<(Substring, Substring)> { /[\[\(\{]([^\[\]\(\)\{\}]*)[\]\)\}]/ }
+    static var yearPattern: Regex<Substring> { /(?:19|20)\d\d/ }
 
     /// "v15", "vol 3", "Vol.03", "Volume 2", "Tome 4", and ranges like "v01-v27" or "v1-3".
     /// Not inside a word, so "Love 2" isn't volume 2.
-    nonisolated(unsafe) static let volumePattern =
+    static var volumePattern: Regex<(Substring, Substring, Substring?)> {
         /(?i)\b(?:v|vol|volume|tome)\.?\s*(\d{1,4}(?:\.\d+)?)(?:[-–](?:v|vol\.?)?(\d{1,4}(?:\.\d+)?))?(?!\d)/
+    }
 
     /// "c003", "ch 12", "Ch.12.5", "Chapter 7".
-    nonisolated(unsafe) static let chapterPattern =
+    static var chapterPattern: Regex<(Substring, Substring)> {
         /(?i)\s*[-–,]?\s*\b(?:c|ch|chap|chapter)\.?\s*(\d{1,4}(?:\.\d+)?)(?!\d)/
+    }
 
     /// "#4", or a zero-padded number such as "004". A plain number is left
     /// alone, so "Catch 22" stays a title.
-    nonisolated(unsafe) static let issuePattern = /(?:#\s*|\b(?=0\d))(\d{1,4}(?:\.\d+)?)(?!\d)/
+    static var issuePattern: Regex<(Substring, Substring)> { /(?:#\s*|\b(?=0\d))(\d{1,4}(?:\.\d+)?)(?!\d)/ }
 
     // MARK: - Helpers
+
+    /// A file name as a title with nothing else changed: no extension, and
+    /// underscores as spaces. The title for files with no metadata, and what
+    /// "Use File Name" puts back.
+    static func plainTitle(fromFileName name: String) -> String {
+        let title = stripExtension(name)
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? String(localized: "Untitled") : title
+    }
 
     static func stripExtension(_ name: String) -> String {
         let ext = (name as NSString).pathExtension.lowercased()

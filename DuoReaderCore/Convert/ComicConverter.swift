@@ -65,7 +65,7 @@ public struct ComicConverter: FileConverter {
         let title = info.displayTitle ?? fromName.title
         if info.series == nil, let series = fromName.series {
             info.series = series
-            info.number = fromName.seriesIndex.map(FileNameTitleParser.number)
+            if info.number == nil { info.number = fromName.seriesIndex.map(FileNameTitleParser.number) }
         }
         try await Self.add("OEBPS/nav.xhtml", Data(Self.navigation(title: title, first: manifest[0]).utf8), to: output)
         try await Self.add("OEBPS/content.opf", Data(Self.packageDocument(title: title, info: info, pages: manifest).utf8), to: output)

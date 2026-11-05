@@ -13,7 +13,9 @@ struct BookDetailsView: View {
     @State private var title: String
     @State private var authors: String
     @State private var series: String
-    @State private var seriesIndex: Double?
+    /// Text rather than a number field: a decimal pad has no Return key, so
+    /// a number field wouldn't commit before Save.
+    @State private var seriesIndex: String
     @State private var saveError: String?
 
     init(book: Book, covers: CoverLibrary = .shared) {
@@ -22,7 +24,7 @@ struct BookDetailsView: View {
         _title = State(initialValue: book.title)
         _authors = State(initialValue: book.authors.joined(separator: ", "))
         _series = State(initialValue: book.series ?? "")
-        _seriesIndex = State(initialValue: book.seriesIndex)
+        _seriesIndex = State(initialValue: book.seriesIndex.map(FileNameTitleParser.number) ?? "")
     }
 
     private var trimmedTitle: String {
@@ -45,7 +47,7 @@ struct BookDetailsView: View {
 
                 Section("Series") {
                     TextField("Series", text: $series)
-                    TextField("Number", value: $seriesIndex, format: .number, prompt: Text("Volume or issue"))
+                    TextField("Number", text: $seriesIndex, prompt: Text("Volume or issue"))
                         .keyboardType(.decimalPad)
                 }
 
@@ -91,8 +93,13 @@ struct BookDetailsView: View {
         title = cleanup.title
         if series.trimmingCharacters(in: .whitespaces).isEmpty, let newSeries = cleanup.series {
             series = newSeries
-            seriesIndex = cleanup.seriesIndex
+            seriesIndex = cleanup.seriesIndex.map(FileNameTitleParser.number) ?? ""
         }
+    }
+
+    /// "15" or "10.5"; a comma works as the decimal point too.
+    private var parsedSeriesIndex: Double? {
+        Double(seriesIndex.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: "."))
     }
 
     private func save() {
@@ -108,7 +115,7 @@ struct BookDetailsView: View {
                 .filter { !$0.isEmpty }
         }
         book.series = newSeries.isEmpty ? nil : newSeries
-        book.seriesIndex = newSeries.isEmpty ? nil : seriesIndex
+        book.seriesIndex = newSeries.isEmpty ? nil : parsedSeriesIndex
         do {
             try modelContext.save()
         } catch {
