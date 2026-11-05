@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -45,8 +46,9 @@ struct DuoReaderApp: App {
                     guard !WidgetLink.isWidgetLink(url) else { return }
                     importController.importFiles([url])
                 }
-                // Keep the home screen widgets in step with the library.
-                .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+                // Keep the home screen widgets in step with the library. The
+                // importer saves on its own context, so hop to the main queue.
+                .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
                     widgetWriter.refreshSoon()
                 }
                 .onChange(of: scenePhase) { _, phase in
