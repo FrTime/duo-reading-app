@@ -86,7 +86,8 @@ final class ReaderModel {
         self.booksFolder = booksFolder
         self.loader = loader
         self.settingsStore = settingsStore
-        settings = settingsStore.load()
+        // Start new readers at their Dynamic Type size.
+        settings = settingsStore.load(firstRunFontScale: UIFontMetrics.default.scaledValue(for: 1))
         progression = book.progress
     }
 
@@ -215,25 +216,34 @@ final class ReaderModel {
 
     // MARK: - Turning pages
 
-    /// Page turns animate unless Reduce Motion is on.
-    private var goOptions: NavigatorGoOptions {
-        NavigatorGoOptions(animated: !UIAccessibility.isReduceMotionEnabled)
+    /// Called after every position change, e.g. so the page host can re-apply
+    /// settings to web views Readium created for the new page.
+    @ObservationIgnored var onLocationChange: (@MainActor () -> Void)?
+
+    /// Whether the book reads right to left, which flips which side is "next".
+    var isRightToLeft: Bool {
+        navigator?.presentation.readingProgression == .rtl
+    }
+
+    /// Turns one page. Returns false at the start or end of the book.
+    @discardableResult
+    func turn(_ turn: PageTurn, animated: Bool) async -> Bool {
+        guard let navigator else { return false }
+        let options = NavigatorGoOptions(animated: animated && !UIAccessibility.isReduceMotionEnabled)
+        switch turn {
+        case .left: return await navigator.goLeft(options: options)
+        case .right: return await navigator.goRight(options: options)
+        case .forward: return await navigator.goForward(options: options)
+        case .backward: return await navigator.goBackward(options: options)
+        }
     }
 
     func goForward() async {
-        _ = await navigator?.goForward(options: goOptions)
+        await turn(.forward, animated: settings.pageTurn == .slide)
     }
 
     func goBackward() async {
-        _ = await navigator?.goBackward(options: goOptions)
-    }
-
-    func goLeft() async {
-        _ = await navigator?.goLeft(options: goOptions)
-    }
-
-    func goRight() async {
-        _ = await navigator?.goRight(options: goOptions)
+        await turn(.backward, animated: settings.pageTurn == .slide)
     }
 
     // MARK: - Position
@@ -242,6 +252,8 @@ final class ReaderModel {
         progression = locator.locations.totalProgression ?? progression
         chapterTitle = locator.title
         position = locator.locations.position
+
+        onLocationChange?()
 
         guard let json = try? locator.jsonString() else { return }
         book.recordReadingPosition(locatorJSON: json, progression: locator.locations.totalProgression)

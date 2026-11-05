@@ -22,6 +22,7 @@ struct ReaderSettingsView: View {
                 if isReflowable {
                     spacingSection
                 }
+                pageTurningSection
                 Section {
                     Button("Reset to Defaults", role: .destructive) {
                         settings = .default
@@ -146,6 +147,33 @@ struct ReaderSettingsView: View {
                     step: 0.25,
                     format: .number.precision(.fractionLength(2))
                 )
+            }
+        }
+    }
+
+    // MARK: - Page turning
+
+    private var pageTurningSection: some View {
+        Section {
+            Picker("Page Turn Animation", selection: $settings.pageTurn) {
+                ForEach(PageTurnStyle.allCases) { style in
+                    Label(style.name, systemImage: style.systemImage).tag(style)
+                }
+            }
+            .disabled(settings.flow == .scroll)
+
+            Picker("Tapping the Sides", selection: $settings.tapZones) {
+                Text("Left Back, Right Forward").tag(TapZoneMode.backAndForward)
+                Text("Both Go Forward").tag(TapZoneMode.forwardOnly)
+                Text("Show Controls Only").tag(TapZoneMode.off)
+            }
+        } header: {
+            Text("Page Turning")
+        } footer: {
+            if UIAccessibility.isReduceMotionEnabled, settings.pageTurn == .slide || settings.pageTurn == .curl {
+                Text("Reduce Motion is on, so pages fade instead.")
+            } else if !isReflowable, settings.pageTurn == .curl || settings.pageTurn == .fade {
+                Text("PDFs slide between pages.")
             }
         }
     }
@@ -323,6 +351,26 @@ extension ReaderTheme {
         case .gray: String(localized: "Grey")
         case .dark: String(localized: "Black")
         case .custom: String(localized: "Custom")
+        }
+    }
+}
+
+extension PageTurnStyle {
+    var name: String {
+        switch self {
+        case .slide: String(localized: "Slide")
+        case .curl: String(localized: "Page Curl")
+        case .fade: String(localized: "Fade")
+        case .none: String(localized: "None")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .slide: "rectangle.portrait.and.arrow.right"
+        case .curl: "book.pages"
+        case .fade: "circle.lefthalf.filled"
+        case .none: "rectangle.portrait"
         }
     }
 }
