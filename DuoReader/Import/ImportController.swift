@@ -32,6 +32,9 @@ final class ImportController {
         guard !urls.isEmpty else { return }
         isImporting = true
         Task {
+            // Ask iCloud for every file up front, so later ones download
+            // while earlier ones are being imported.
+            for url in urls { CloudFiles.requestDownload(url) }
             var outcomes: [ImportOutcome] = []
             for (index, url) in urls.enumerated() {
                 let accessing = url.startAccessingSecurityScopedResource()

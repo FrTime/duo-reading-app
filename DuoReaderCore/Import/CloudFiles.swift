@@ -11,6 +11,15 @@ public enum CloudFiles {
         return values.ubiquitousItemDownloadingStatus != .current
     }
 
+    /// Starts downloading the file in the background if it's in iCloud and
+    /// not on the device yet. Returns at once.
+    public static func requestDownload(_ url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard needsDownload(url) else { return }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+    }
+
     /// Downloads the file if needed, returning once it's readable. Runs the
     /// blocking coordinated read off the caller's thread.
     public static func download(_ url: URL) async throws {
