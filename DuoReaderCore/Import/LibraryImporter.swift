@@ -19,6 +19,8 @@ public enum ImportFailure: Error, Sendable, Equatable {
     case unreadable
     /// The file couldn't be copied into the library (permissions, disk space).
     case copyFailed
+    /// Over the size limit for its format (see `BookConverters.maxSourceBytes`).
+    case tooLarge
 }
 
 /// Copies files into the library and creates their `Book`s, off the main actor.
@@ -40,17 +42,22 @@ public actor LibraryImporter {
         URL.applicationSupportDirectory.appending(path: "Books", directoryHint: .isDirectory)
     }
 
-    /// Formats the importer accepts today: those with a metadata reader.
+    /// Formats the importer accepts today: those read natively, plus those
+    /// converted to EPUB on import.
     public static var supportedFormats: [BookFormat] {
-        BookFormat.allCases.filter { MetadataReaders.reader(for: $0) != nil }
+        BookFormat.allCases.filter { MetadataReaders.reader(for: $0) != nil || BookConverters.converter(for: $0) != nil }
     }
 
     /// Imports each file in order and reports what happened to each.
-    public func importFiles(_ urls: [URL]) -> [ImportOutcome] {
-        urls.map(importFile)
+    public func importFiles(_ urls: [URL]) async -> [ImportOutcome] {
+        var outcomes: [ImportOutcome] = []
+        for url in urls {
+            outcomes.append(await importFile(url))
+        }
+        return outcomes
     }
 
-    public func importFile(_ url: URL) -> ImportOutcome {
+    public func importFile(_ url: URL) async -> ImportOutcome {
         let fileName = url.lastPathComponent
         let accessing = url.startAccessingSecurityScopedResource()
         defer {
@@ -60,8 +67,12 @@ public actor LibraryImporter {
             if Self.isInboxCopy(url) { try? FileManager.default.removeItem(at: url) }
         }
 
-        guard let format = BookFormat(url: url),
-              let reader = MetadataReaders.reader(for: format) else {
+        guard let format = BookFormat(url: url) else {
+            return .failed(fileName: fileName, reason: .unsupportedFormat)
+        }
+        // Text formats are converted to EPUB, then read like any other EPUB.
+        let converter = BookConverters.converter(for: format)
+        guard let reader = converter == nil ? MetadataReaders.reader(for: format) : EPUBMetadataReader() else {
             return .failed(fileName: fileName, reason: .unsupportedFormat)
         }
 
@@ -76,9 +87,28 @@ public actor LibraryImporter {
             return .duplicate(title: existing.title)
         }
 
+        // What gets copied into the library: the file itself, or its EPUB.
+        var source = url
+        var storedFormat = format
+        var convertedCopy: URL?
+        defer { if let convertedCopy { try? FileManager.default.removeItem(at: convertedCopy) } }
+        if let converter {
+            let temporary = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).epub")
+            do {
+                try await EPUBWriter.write(converter.document(from: url), to: temporary)
+            } catch {
+                try? FileManager.default.removeItem(at: temporary)
+                let reason: ImportFailure = (error as? ConversionError) == .tooLarge ? .tooLarge : .unreadable
+                return .failed(fileName: fileName, reason: reason)
+            }
+            convertedCopy = temporary
+            source = temporary
+            storedFormat = .epub
+        }
+
         let metadata: BookMetadata
         do {
-            metadata = try reader.readMetadata(from: url)
+            metadata = try await reader.readMetadata(from: source)
         } catch MetadataError.drmProtected {
             return .failed(fileName: fileName, reason: .drmProtected)
         } catch {
@@ -86,11 +116,11 @@ public actor LibraryImporter {
         }
 
         let id = UUID()
-        let relativePath = "\(id.uuidString).\(format.fileExtensions[0])"
+        let relativePath = "\(id.uuidString).\(storedFormat.fileExtensions[0])"
         let destination = booksFolder.appending(path: relativePath)
         do {
             try FileManager.default.createDirectory(at: booksFolder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: url, to: destination)
+            try FileManager.default.copyItem(at: source, to: destination)
         } catch {
             return .failed(fileName: fileName, reason: .copyFailed)
         }
@@ -99,7 +129,7 @@ public actor LibraryImporter {
             id: id,
             relativeFilePath: relativePath,
             contentHash: hash,
-            format: format,
+            format: storedFormat,
             title: "",
             shelfOrder: nextShelfOrder()
         )

@@ -26,6 +26,12 @@ struct LibraryView: View {
     /// Called when a book is tapped. The reader (#17) plugs in here.
     var onOpen: (Book) -> Void = { _ in }
 
+    // Explicit because the private @State properties make the memberwise
+    // initializer fileprivate.
+    init(onOpen: @escaping (Book) -> Void = { _ in }) {
+        self.onOpen = onOpen
+    }
+
     private var books: [Book] {
         LibraryQuery.sort(LibraryQuery.filter(allBooks, matching: searchText), by: sort)
     }

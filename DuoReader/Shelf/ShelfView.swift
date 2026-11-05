@@ -58,6 +58,7 @@ struct ShelfView: View {
                 content.camera = .virtual
                 content.add(scene.root)
             }
+            .accessibilityHidden(true)
             .onAppear { resize(to: proxy.size) }
             .onChange(of: proxy.size) { _, size in resize(to: size) }
         }
@@ -66,15 +67,21 @@ struct ShelfView: View {
         .onTapGesture(coordinateSpace: .local) { location in tap(at: location) }
         .gesture(LongPressDragGesture { phase, location in longPress(phase, at: location) })
         .simultaneousGesture(scrollGesture)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Bookshelf"))
-        .accessibilityChildren { accessibleBooks }
-        .accessibilityScrollAction { edge in
-            switch edge {
-            case .top: scroll(by: camera.halfHeight * 1.6, animated: true)
-            case .bottom: scroll(by: -camera.halfHeight * 1.6, animated: true)
-            default: break
-            }
+        // VoiceOver reads invisible stand-ins laid over the books. They sit
+        // in an overlay, not in `accessibilityChildren` on the container:
+        // that modifier stops the RealityView from ever drawing.
+        .overlay {
+            accessibleBooks
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("Bookshelf"))
+                .accessibilityScrollAction { edge in
+                    switch edge {
+                    case .top: scroll(by: camera.halfHeight * 1.6, animated: true)
+                    case .bottom: scroll(by: -camera.halfHeight * 1.6, animated: true)
+                    default: break
+                    }
+                }
         }
         .overlay {
             if books.isEmpty {

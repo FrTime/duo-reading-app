@@ -71,6 +71,10 @@ xcodebuild test -project DuoReader.xcodeproj -scheme DuoReader \
 - The SwiftData schema is versioned in
   `DuoReaderCore/Models/DuoReaderSchema.swift`. Changing a model means adding a
   schema version and a migration stage, never editing a shipped version.
+  Until the first TestFlight build nothing has shipped, so `DuoReaderSchemaV1`
+  is still edited in place; delete the app from the simulator if an old
+  development store won't open. From the first TestFlight build on, every
+  model change gets a new schema version and migration stage.
 - **Every PR is built and tested on Tim's Mac** with the command above, and the
   result is posted on the PR. GitHub Actions CI (`.github/workflows/ci.yml`) is
   manual-only until Actions billing is sorted and runners have Xcode 27.1.
