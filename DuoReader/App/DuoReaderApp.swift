@@ -38,28 +38,7 @@ struct DuoReaderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(importController)
-                // "Open in Duo Reader" from Files, Mail, Safari and the share
-                // sheet. Widget links are handled by `RootView`.
-                .onOpenURL { url in
-                    guard !WidgetLink.isWidgetLink(url) else { return }
-                    importController.importFiles([url])
-                }
-                // Keep the home screen widgets in step with the library. The
-                // importer saves on its own context, so hop to the main queue.
-                .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
-                    widgetWriter.refreshSoon()
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .background { refreshWidgetsInBackground() }
-                }
-                .task { await widgetWriter.refresh() }
-                .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
-                    Button("OK") {}
-                } message: {
-                    Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
-                }
+            mainContent
         }
         .modelContainer(container)
     }
@@ -74,6 +53,31 @@ struct DuoReaderApp: App {
             await writer.refresh()
             assertion.end()
         }
+    }
+
+    private var mainContent: some View {
+        RootView()
+            .environment(importController)
+            // "Open in Duo Reader" from Files, Mail, Safari and the share
+            // sheet. Widget links are handled by `RootView`.
+            .onOpenURL { url in
+                guard !WidgetLink.isWidgetLink(url) else { return }
+                importController.importFiles([url])
+            }
+            // Keep the home screen widgets in step with the library. The
+            // importer saves on its own context, so hop to the main queue.
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave).receive(on: DispatchQueue.main)) { _ in
+                widgetWriter.refreshSoon()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { refreshWidgetsInBackground() }
+            }
+            .task { await widgetWriter.refresh() }
+            .alert("Your library was rebuilt", isPresented: $recoveredLibrary) {
+                Button("OK") {}
+            } message: {
+                Text("Your library couldn't be opened, so it was rebuilt from your book files. Your books are all here, but reading positions and highlights from before couldn't be recovered.")
+            }
     }
 }
 
@@ -103,6 +107,8 @@ private struct RootView: View {
                     openBook = book
                 }
             }
+            // The open book's cover on iPhone Duo's outer screen.
+            .modifier(OuterCoverAccessory(book: openBook))
             #if DEBUG
             // `-DuoReaderOpenFirstBook` opens the first book at launch, so the
             // reader can be screenshotted on a simulator without tapping.

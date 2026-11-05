@@ -191,6 +191,24 @@ struct PublicationLoaderTests {
 
 @MainActor
 struct ReaderModelTests {
+    @Test func closingSavesSettingsChangedJustBefore() throws {
+        let suite = "ReaderModelTests-\(UUID().uuidString)"
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let book = insertBook(.epub, file: URL(filePath: "/nonexistent.epub"), in: container.mainContext)
+        let model = ReaderModel(
+            book: book,
+            booksFolder: URL(filePath: "/"),
+            settingsStore: ReaderSettingsStore(suiteName: suite)
+        )
+
+        // Saving waits for slider drags to settle; closing mustn't lose the change.
+        model.settings.theme = .sepia
+        #expect(ReaderSettingsStore(suiteName: suite).load().theme == .light)
+        model.close()
+        #expect(ReaderSettingsStore(suiteName: suite).load().theme == .sepia)
+    }
+
     private func insertBook(_ format: BookFormat, file: URL, in context: ModelContext) -> Book {
         let book = Book(relativeFilePath: file.lastPathComponent, contentHash: UUID().uuidString, format: format, title: "Book")
         context.insert(book)
