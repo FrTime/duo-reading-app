@@ -22,10 +22,25 @@ struct CoverEditorView: View {
         NavigationStack {
             Group {
                 if sizeClass == .regular {
-                    HStack(spacing: 0) {
-                        stageArea
-                        Divider()
-                        panelArea
+                    GeometryReader { proxy in
+                        if let fold = ShelfView.verticalFold(in: proxy), fold.minX > 200, proxy.size.width - fold.maxX > 280 {
+                            // On the open Duo: the cover on the left screen,
+                            // tools on the right, nothing on the hinge.
+                            HStack(spacing: 0) {
+                                stageArea
+                                    .frame(width: fold.minX)
+                                Color(.separator)
+                                    .frame(width: fold.width)
+                                panelArea
+                                    .frame(maxWidth: .infinity)
+                            }
+                        } else {
+                            HStack(spacing: 0) {
+                                stageArea
+                                Divider()
+                                panelArea
+                            }
+                        }
                     }
                 } else {
                     VStack(spacing: 0) {
