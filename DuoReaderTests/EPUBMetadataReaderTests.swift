@@ -7,7 +7,7 @@ struct EPUBMetadataReaderTests {
 
     // MARK: EPUB 3
 
-    @Test func readsEPUB3Metadata() throws {
+    @Test func readsEPUB3Metadata() async throws {
         let opf = """
         <?xml version="1.0" encoding="UTF-8"?>
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
@@ -31,13 +31,13 @@ struct EPUBMetadataReaderTests {
           <spine><itemref idref="ch1"/></spine>
         </package>
         """
-        let url = try Fixtures.epub([
+        let url = try await Fixtures.epub([
             "OEBPS/content.opf": Data(opf.utf8),
             "OEBPS/images/front.png": Fixtures.tinyPNG,
             "OEBPS/text/ch1.xhtml": Data("<html/>".utf8),
         ])
 
-        let m = try reader.readMetadata(from: url)
+        let m = try await reader.readMetadata(from: url)
         #expect(m.title == "The Long Way Round")
         #expect(m.authors == ["Ada Writer", "Ben Coauthor"])
         #expect(m.language == "en")
@@ -53,7 +53,7 @@ struct EPUBMetadataReaderTests {
 
     // MARK: EPUB 2
 
-    @Test func readsEPUB2CoverAndCalibreSeries() throws {
+    @Test func readsEPUB2CoverAndCalibreSeries() async throws {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
@@ -68,12 +68,12 @@ struct EPUBMetadataReaderTests {
           <spine/>
         </package>
         """
-        let url = try Fixtures.epub([
+        let url = try await Fixtures.epub([
             "OPS/Text/content.opf": Data(opf.utf8),
             "OPS/Images/c over.png": Fixtures.tinyPNG,
         ], opfPath: "OPS/Text/content.opf")
 
-        let m = try reader.readMetadata(from: url)
+        let m = try await reader.readMetadata(from: url)
         #expect(m.title == "Old Style")
         #expect(m.series == "Classics")
         #expect(m.seriesIndex == 3.5)
@@ -81,7 +81,7 @@ struct EPUBMetadataReaderTests {
         #expect(m.authors.isEmpty)
     }
 
-    @Test func fallsBackToImageNamedCover() throws {
+    @Test func fallsBackToImageNamedCover() async throws {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title></metadata>
@@ -89,13 +89,13 @@ struct EPUBMetadataReaderTests {
           <spine/>
         </package>
         """
-        let url = try Fixtures.epub(["content.opf": Data(opf.utf8), "cover.png": Fixtures.tinyPNG], opfPath: "content.opf")
-        #expect(try reader.readMetadata(from: url).coverImageData == Fixtures.tinyPNG)
+        let url = try await Fixtures.epub(["content.opf": Data(opf.utf8), "cover.png": Fixtures.tinyPNG], opfPath: "content.opf")
+        #expect(try await reader.readMetadata(from: url).coverImageData == Fixtures.tinyPNG)
     }
 
     // MARK: AO3
 
-    @Test func readsAO3Tags() throws {
+    @Test func readsAO3Tags() async throws {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -135,12 +135,12 @@ struct EPUBMetadataReaderTests {
         </dl></div>
         </body></html>
         """
-        let url = try Fixtures.epub([
+        let url = try await Fixtures.epub([
             "OEBPS/content.opf": Data(opf.utf8),
             "OEBPS/preface.xhtml": Data(preface.utf8),
         ])
 
-        let m = try reader.readMetadata(from: url)
+        let m = try await reader.readMetadata(from: url)
         let ao3 = try #require(m.ao3)
         #expect(ao3.workURL == URL(string: "https://archiveofourown.org/works/123456"))
         #expect(ao3.rating == "Teen And Up Audiences")
@@ -158,27 +158,27 @@ struct EPUBMetadataReaderTests {
 
     // MARK: Errors
 
-    @Test func rejectsNonZip() throws {
+    @Test func rejectsNonZip() async throws {
         let url = Fixtures.temporaryURL("bad.epub")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("not a zip".utf8).write(to: url)
-        #expect(throws: MetadataError.self) { try reader.readMetadata(from: url) }
+        await #expect(throws: MetadataError.self) { try await reader.readMetadata(from: url) }
     }
 
-    @Test func rejectsMissingPackage() throws {
-        let url = try Fixtures.epub(["OEBPS/other.txt": Data("x".utf8)])
-        #expect(throws: MetadataError.malformed("Missing package document")) { try reader.readMetadata(from: url) }
+    @Test func rejectsMissingPackage() async throws {
+        let url = try await Fixtures.epub(["OEBPS/other.txt": Data("x".utf8)])
+        await #expect(throws: MetadataError.malformed("Missing package document")) { try await reader.readMetadata(from: url) }
     }
 
-    @Test func rejectsOversizedPackageDocument() throws {
+    @Test func rejectsOversizedPackageDocument() async throws {
         let huge = Data(repeating: 0x20, count: Int(EPUBMetadataReader.maxDocumentBytes) + 1)
-        let url = try Fixtures.epub(["OEBPS/content.opf": huge])
-        #expect(throws: MetadataError.malformed("Entry too large: OEBPS/content.opf")) {
-            try reader.readMetadata(from: url)
+        let url = try await Fixtures.epub(["OEBPS/content.opf": huge])
+        await #expect(throws: MetadataError.malformed("Entry too large: OEBPS/content.opf")) {
+            try await reader.readMetadata(from: url)
         }
     }
 
-    @Test func skipsOversizedCover() throws {
+    @Test func skipsOversizedCover() async throws {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Big Cover</dc:title></metadata>
@@ -187,31 +187,31 @@ struct EPUBMetadataReaderTests {
         </package>
         """
         let big = Data(repeating: 0, count: Int(EPUBMetadataReader.maxCoverBytes) + 1)
-        let url = try Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8), "OEBPS/c.png": big])
-        let m = try reader.readMetadata(from: url)
+        let url = try await Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8), "OEBPS/c.png": big])
+        let m = try await reader.readMetadata(from: url)
         #expect(m.title == "Big Cover")
         #expect(m.coverImageData == nil)
     }
 
-    @Test func detectsDRM() throws {
+    @Test func detectsDRM() async throws {
         let encryption = """
         <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
           <EncryptedData><EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/></EncryptedData>
         </encryption>
         """
-        let url = try Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data("<package/>".utf8)])
-        #expect(throws: MetadataError.drmProtected) { try reader.readMetadata(from: url) }
+        let url = try await Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data("<package/>".utf8)])
+        await #expect(throws: MetadataError.drmProtected) { try await reader.readMetadata(from: url) }
     }
 
-    @Test func allowsFontObfuscation() throws {
+    @Test func allowsFontObfuscation() async throws {
         let encryption = """
         <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
           <EncryptedData><EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/></EncryptedData>
         </encryption>
         """
         let opf = #"<package><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fonts</dc:title></metadata></package>"#
-        let url = try Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data(opf.utf8)])
-        #expect(try reader.readMetadata(from: url).title == "Fonts")
+        let url = try await Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data(opf.utf8)])
+        #expect(try await reader.readMetadata(from: url).title == "Fonts")
     }
 
     // MARK: Helpers

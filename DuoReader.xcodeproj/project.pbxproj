@@ -7,7 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA0000000000000000000032 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* ZIPFoundation */; };
+		AA0000000000000000000032 /* ReadiumZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000031 /* ReadiumZIPFoundation */; };
+		AA0000000000000000000037 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000034 /* ReadiumShared */; };
+		AA0000000000000000000038 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000035 /* ReadiumStreamer */; };
+		AA0000000000000000000039 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000036 /* ReadiumNavigator */; };
+		AA000000000000000000003C /* SwiftSoup in Frameworks */ = {isa = PBXBuildFile; productRef = AA000000000000000000003B /* SwiftSoup */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,7 +52,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA0000000000000000000032 /* ZIPFoundation in Frameworks */,
+				AA0000000000000000000032 /* ReadiumZIPFoundation in Frameworks */,
+				AA0000000000000000000037 /* ReadiumShared in Frameworks */,
+				AA0000000000000000000038 /* ReadiumStreamer in Frameworks */,
+				AA0000000000000000000039 /* ReadiumNavigator in Frameworks */,
+				AA000000000000000000003C /* SwiftSoup in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,7 +110,11 @@
 			);
 			name = DuoReader;
 			packageProductDependencies = (
-				AA0000000000000000000031 /* ZIPFoundation */,
+				AA0000000000000000000031 /* ReadiumZIPFoundation */,
+				AA0000000000000000000034 /* ReadiumShared */,
+				AA0000000000000000000035 /* ReadiumStreamer */,
+				AA0000000000000000000036 /* ReadiumNavigator */,
+				AA000000000000000000003B /* SwiftSoup */,
 			);
 			productName = DuoReader;
 			productReference = AA0000000000000000000004 /* DuoReader.app */;
@@ -159,6 +171,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA0000000000000000000030 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				AA0000000000000000000033 /* XCRemoteSwiftPackageReference "swift-toolkit" */,
+				AA000000000000000000003A /* XCRemoteSwiftPackageReference "SwiftSoup" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA0000000000000000000003 /* Products */;
@@ -410,19 +424,55 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		AA0000000000000000000030 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
+			repositoryURL = "https://github.com/readium/ZIPFoundation";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.19;
+				minimumVersion = 3.0.1;
+			};
+		};
+		AA0000000000000000000033 /* XCRemoteSwiftPackageReference "swift-toolkit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/readium/swift-toolkit";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.11.1;
+			};
+		};
+		AA000000000000000000003A /* XCRemoteSwiftPackageReference "SwiftSoup" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/scinfu/SwiftSoup.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.14.3;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AA0000000000000000000031 /* ZIPFoundation */ = {
+		AA0000000000000000000031 /* ReadiumZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000000000000000000030 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
-			productName = ZIPFoundation;
+			productName = ReadiumZIPFoundation;
+		};
+		AA0000000000000000000034 /* ReadiumShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000033 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumShared;
+		};
+		AA0000000000000000000035 /* ReadiumStreamer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000033 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumStreamer;
+		};
+		AA0000000000000000000036 /* ReadiumNavigator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000033 /* XCRemoteSwiftPackageReference "swift-toolkit" */;
+			productName = ReadiumNavigator;
+		};
+		AA000000000000000000003B /* SwiftSoup */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000000000000000000003A /* XCRemoteSwiftPackageReference "SwiftSoup" */;
+			productName = SwiftSoup;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

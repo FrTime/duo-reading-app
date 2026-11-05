@@ -100,6 +100,7 @@ extension ImportFailure {
         case .drmProtected: String(localized: "This book is DRM-protected and can't be opened.")
         case .unreadable: String(localized: "The file looks damaged and couldn't be read.")
         case .copyFailed: String(localized: "The file couldn't be saved. Check you have free space.")
+        case .tooLarge: String(localized: "The file is too large to import.")
         }
     }
 }

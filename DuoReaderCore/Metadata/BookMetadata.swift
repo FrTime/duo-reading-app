@@ -45,7 +45,7 @@ public struct AO3Metadata: Codable, Equatable, Hashable, Sendable {
 
 /// Reads metadata from one file format.
 public protocol MetadataReader: Sendable {
-    func readMetadata(from url: URL) throws -> BookMetadata
+    func readMetadata(from url: URL) async throws -> BookMetadata
 }
 
 public enum MetadataError: Error, Equatable {

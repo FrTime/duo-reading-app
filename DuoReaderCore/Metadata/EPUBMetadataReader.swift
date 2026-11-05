@@ -1,5 +1,6 @@
 import Foundation
-import ZIPFoundation
+import ReadiumZIPFoundation
+import Synchronization
 
 /// Reads EPUB 2 and EPUB 3 metadata: the OPF package document, the cover
 /// image, and for AO3 downloads the tags on the work's preface page.
@@ -12,22 +13,22 @@ public struct EPUBMetadataReader: MetadataReader {
 
     public init() {}
 
-    public func readMetadata(from url: URL) throws -> BookMetadata {
+    public func readMetadata(from url: URL) async throws -> BookMetadata {
         let archive: Archive
         do {
-            archive = try Archive(url: url, accessMode: .read)
+            archive = try await Archive(url: url, accessMode: .read)
         } catch {
             throw MetadataError.malformed("Not a ZIP archive")
         }
 
-        if archive["META-INF/encryption.xml"] != nil, try isFontObfuscationOnly(archive) == false {
+        if try await archive.get("META-INF/encryption.xml") != nil, try await isFontObfuscationOnly(archive) == false {
             throw MetadataError.drmProtected
         }
 
         guard
-            let containerData = try Self.data(at: "META-INF/container.xml", in: archive),
+            let containerData = try await Self.data(at: "META-INF/container.xml", in: archive),
             let opfPath = ContainerParser.rootfilePath(in: containerData),
-            let opfData = try Self.data(at: opfPath, in: archive)
+            let opfData = try await Self.data(at: opfPath, in: archive)
         else {
             throw MetadataError.malformed("Missing package document")
         }
@@ -38,8 +39,8 @@ public struct EPUBMetadataReader: MetadataReader {
 
         if let coverHref = package.coverHref {
             let path = Self.resolve(coverHref, relativeTo: base)
-            if let entry = archive[path], Int64(entry.uncompressedSize) <= Self.maxCoverBytes {
-                metadata.coverImageData = try Self.data(at: path, in: archive, limit: Self.maxCoverBytes)
+            if let entry = try await archive.get(path), Int64(entry.uncompressedSize) <= Self.maxCoverBytes {
+                metadata.coverImageData = try await Self.data(at: path, in: archive, limit: Self.maxCoverBytes)
             }
         }
 
@@ -52,7 +53,7 @@ public struct EPUBMetadataReader: MetadataReader {
             var series: AO3PrefaceParser.Series?
             for href in package.spineHrefs.prefix(2) {
                 let path = Self.resolve(href, relativeTo: base)
-                if let page = try Self.data(at: path, in: archive) {
+                if let page = try await Self.data(at: path, in: archive) {
                     series = AO3PrefaceParser.parse(page, into: &ao3) ?? series
                 }
                 if !ao3.fandoms.isEmpty { break }
@@ -71,19 +72,21 @@ public struct EPUBMetadataReader: MetadataReader {
 
     /// Reads one entry, refusing entries larger than `limit` both by their
     /// declared size and by what actually inflates (the header can lie).
-    static func data(at path: String, in archive: Archive, limit: Int64 = maxDocumentBytes) throws -> Data? {
-        guard let entry = archive[path] else { return nil }
+    static func data(at path: String, in archive: Archive, limit: Int64 = maxDocumentBytes) async throws -> Data? {
+        guard let entry = try await archive.get(path) else { return nil }
         guard Int64(entry.uncompressedSize) <= limit else {
             throw MetadataError.malformed("Entry too large: \(path)")
         }
-        var data = Data()
-        _ = try archive.extract(entry, skipCRC32: false) { chunk in
-            guard Int64(data.count + chunk.count) <= limit else {
-                throw MetadataError.malformed("Entry too large: \(path)")
+        let buffer = Mutex(Data())
+        _ = try await archive.extract(entry, skipCRC32: false) { chunk in
+            try buffer.withLock { data in
+                guard Int64(data.count + chunk.count) <= limit else {
+                    throw MetadataError.malformed("Entry too large: \(path)")
+                }
+                data.append(chunk)
             }
-            data.append(chunk)
         }
-        return data
+        return buffer.withLock { $0 }
     }
 
     /// Resolves an href from the OPF against the OPF's folder, handling `../`
@@ -109,8 +112,8 @@ public struct EPUBMetadataReader: MetadataReader {
 
     /// `encryption.xml` also shows up in DRM-free books that only obfuscate
     /// embedded fonts (IDPF or Adobe font mangling). Anything else is DRM.
-    private func isFontObfuscationOnly(_ archive: Archive) throws -> Bool {
-        guard let data = try Self.data(at: "META-INF/encryption.xml", in: archive),
+    private func isFontObfuscationOnly(_ archive: Archive) async throws -> Bool {
+        guard let data = try await Self.data(at: "META-INF/encryption.xml", in: archive),
               let xml = String(data: data, encoding: .utf8) else { return false }
         let algorithms = xml.matches(of: /Algorithm="([^"]+)"/).map { String($0.1) }
         let fontAlgorithms: Set<String> = [

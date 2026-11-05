@@ -15,7 +15,7 @@ struct LibraryImporterTests {
         importer = LibraryImporter(modelContainer: container, booksFolder: booksFolder)
     }
 
-    nonisolated static func sampleEPUB(title: String = "Imported Book") throws -> URL {
+    nonisolated static func sampleEPUB(title: String = "Imported Book") async throws -> URL {
         let opf = """
         <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
           <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -24,7 +24,7 @@ struct LibraryImporterTests {
           <manifest/><spine/>
         </package>
         """
-        return try Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8)])
+        return try await Fixtures.epub(["OEBPS/content.opf": Data(opf.utf8)])
     }
 
     private func allBooks() throws -> [Book] {
@@ -32,7 +32,7 @@ struct LibraryImporterTests {
     }
 
     @Test func importsAnEPUBAndCopiesIt() async throws {
-        let source = try Self.sampleEPUB()
+        let source = try await Self.sampleEPUB()
         let outcome = await importer.importFile(source)
 
         guard case .imported(_, let title) = outcome else {
@@ -59,7 +59,7 @@ struct LibraryImporterTests {
     }
 
     @Test func detectsDuplicatesByContent() async throws {
-        let source = try Self.sampleEPUB()
+        let source = try await Self.sampleEPUB()
         let renamedCopy = Fixtures.temporaryURL("renamed.epub")
         try FileManager.default.createDirectory(at: renamedCopy.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: source, to: renamedCopy)
@@ -71,8 +71,8 @@ struct LibraryImporterTests {
     }
 
     @Test func appendsToTheEndOfTheShelf() async throws {
-        _ = await importer.importFile(try Self.sampleEPUB(title: "First"))
-        _ = await importer.importFile(try Self.sampleEPUB(title: "Second"))
+        _ = await importer.importFile(try await Self.sampleEPUB(title: "First"))
+        _ = await importer.importFile(try await Self.sampleEPUB(title: "Second"))
         let books = try allBooks()
         #expect(books.map(\.title) == ["First", "Second"])
         #expect(books.map(\.shelfOrder) == [0, 1])
@@ -97,7 +97,7 @@ struct LibraryImporterTests {
 
     @Test func reportsDRM() async throws {
         let encryption = #"<encryption><EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/></encryption>"#
-        let url = try Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data("<package/>".utf8)],
+        let url = try await Fixtures.epub(["META-INF/encryption.xml": Data(encryption.utf8), "OEBPS/content.opf": Data("<package/>".utf8)],
                                     name: "locked.epub")
         #expect(await importer.importFile(url) == .failed(fileName: "locked.epub", reason: .drmProtected))
     }
@@ -106,7 +106,7 @@ struct LibraryImporterTests {
         let inbox = Fixtures.temporaryURL("Documents/Inbox/x").deletingLastPathComponent()
         try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
         let inboxCopy = inbox.appending(path: "book.epub")
-        try FileManager.default.copyItem(at: try Self.sampleEPUB(), to: inboxCopy)
+        try FileManager.default.copyItem(at: try await Self.sampleEPUB(), to: inboxCopy)
 
         guard case .imported = await importer.importFile(inboxCopy) else {
             Issue.record("Expected import"); return
@@ -115,7 +115,7 @@ struct LibraryImporterTests {
     }
 
     @Test func leavesOtherSourcesAlone() async throws {
-        let source = try Self.sampleEPUB()
+        let source = try await Self.sampleEPUB()
         _ = await importer.importFile(source)
         #expect(FileManager.default.fileExists(atPath: source.path()))
     }
