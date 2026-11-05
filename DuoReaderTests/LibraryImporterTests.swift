@@ -102,6 +102,24 @@ struct LibraryImporterTests {
         #expect(await importer.importFile(url) == .failed(fileName: "locked.epub", reason: .drmProtected))
     }
 
+    @Test func removesOpenInInboxCopyAfterImport() async throws {
+        let inbox = Fixtures.temporaryURL("Documents/Inbox/x").deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        let inboxCopy = inbox.appending(path: "book.epub")
+        try FileManager.default.copyItem(at: try Self.sampleEPUB(), to: inboxCopy)
+
+        guard case .imported = await importer.importFile(inboxCopy) else {
+            Issue.record("Expected import"); return
+        }
+        #expect(!FileManager.default.fileExists(atPath: inboxCopy.path()))
+    }
+
+    @Test func leavesOtherSourcesAlone() async throws {
+        let source = try Self.sampleEPUB()
+        _ = await importer.importFile(source)
+        #expect(FileManager.default.fileExists(atPath: source.path()))
+    }
+
     @Test nonisolated func sha256MatchesKnownValue() throws {
         let url = Fixtures.temporaryURL("abc.txt")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

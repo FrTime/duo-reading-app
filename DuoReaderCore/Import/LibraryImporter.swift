@@ -53,7 +53,12 @@ public actor LibraryImporter {
     public func importFile(_ url: URL) -> ImportOutcome {
         let fileName = url.lastPathComponent
         let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        defer {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+            // "Open in" hands us a copy in Documents/Inbox. It's ours, and
+            // we've made our own copy (or rejected it), so don't keep two.
+            if Self.isInboxCopy(url) { try? FileManager.default.removeItem(at: url) }
+        }
 
         guard let format = BookFormat(url: url),
               let reader = MetadataReaders.reader(for: format) else {
@@ -123,6 +128,14 @@ public actor LibraryImporter {
         descriptor.fetchLimit = 1
         let last = (try? modelContext.fetch(descriptor).first?.shelfOrder) ?? -1
         return last + 1
+    }
+
+    /// True for the copies iOS drops in `Documents/Inbox` when another app
+    /// opens a file in ours.
+    static func isInboxCopy(_ url: URL) -> Bool {
+        let parts = url.standardizedFileURL.pathComponents
+        guard parts.count >= 3 else { return false }
+        return parts[parts.count - 2] == "Inbox" && parts[parts.count - 3] == "Documents"
     }
 
     /// SHA-256 of a file, read in 1 MB chunks so large PDFs don't load into memory.
