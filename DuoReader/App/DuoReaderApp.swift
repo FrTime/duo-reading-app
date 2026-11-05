@@ -69,10 +69,16 @@ private struct RootView: View {
             // The open book's cover on iPhone Duo's outer screen.
             .modifier(OuterCoverAccessory(book: openBook))
             #if DEBUG
-            // `-DuoReaderOpenFirstBook` opens the first book at launch, so the
-            // reader can be screenshotted on a simulator without tapping.
+            // `-DuoReaderOpenFirstBook` opens the first book at launch, and
+            // `-DuoReaderOpenBook <title>` the first whose title contains
+            // <title>, so the reader can be screenshotted on a shared
+            // simulator without tapping through the library.
             .task {
-                if ProcessInfo.processInfo.arguments.contains("-DuoReaderOpenFirstBook") {
+                let arguments = ProcessInfo.processInfo.arguments
+                if let index = arguments.firstIndex(of: "-DuoReaderOpenBook"), arguments.indices.contains(index + 1) {
+                    let title = arguments[index + 1]
+                    openBook = books.first { $0.title.localizedCaseInsensitiveContains(title) }
+                } else if arguments.contains("-DuoReaderOpenFirstBook") {
                     openBook = books.first
                 }
             }
