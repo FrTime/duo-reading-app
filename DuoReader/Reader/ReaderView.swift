@@ -26,6 +26,9 @@ struct ReaderView: View {
                 .toolbar { toolbarContent }
                 .toolbarVisibility(chromeVisibility, for: .navigationBar, .bottomBar)
                 .toolbarColorScheme(pageColorScheme, for: .navigationBar, .bottomBar)
+                // Bars take the page colour so a theme doesn't show a band
+                // of system material behind the title.
+                .toolbarBackground(pageColor, for: .navigationBar, .bottomBar)
                 .background(pageColor.ignoresSafeArea())
         }
         .statusBarHidden(!model.isChromeVisible)
@@ -94,7 +97,7 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            NavigatorHost(model: model)
+            NavigatorHost(model: model, settings: model.settings)
                 // Readium insets the page for the top and bottom safe areas
                 // itself, but not the sides. On the Duo's outer screen the
                 // status bar is a column on the side, so keep the side insets.

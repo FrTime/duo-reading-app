@@ -311,10 +311,16 @@ public struct ReaderSettingsStore: Sendable {
         defaultsSuite.flatMap(UserDefaults.init(suiteName:)) ?? .standard
     }
 
-    public func load() -> ReaderSettings {
+    /// Loads the saved settings.
+    ///
+    /// - Parameter firstRunFontScale: Text size to start with when nothing is
+    ///   saved yet, e.g. from the system's Dynamic Type size.
+    public func load(firstRunFontScale: Double = 1) -> ReaderSettings {
         guard let data = defaults.data(forKey: Self.key),
               let settings = try? JSONDecoder().decode(ReaderSettings.self, from: data) else {
-            return .default
+            var settings = ReaderSettings.default
+            settings.fontScale = (firstRunFontScale * 10).rounded() / 10
+            return settings.clamped()
         }
         return settings
     }
