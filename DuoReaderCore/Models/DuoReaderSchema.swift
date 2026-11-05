@@ -98,6 +98,9 @@ public enum LibraryStore {
 
     /// Recreates a `Book` for every file already in the books folder, keeping
     /// its id (the file's UUID name) so other features' files still match.
+    /// Books converted from text are stored as EPUB, so their hash becomes the
+    /// EPUB's: re-importing the original text afterwards adds a second copy
+    /// rather than being caught as a duplicate.
     /// Shelf order follows when each file was added. Runs on its own context,
     /// so call it off the main thread; it saves in batches so the shelf fills
     /// in as it goes.
