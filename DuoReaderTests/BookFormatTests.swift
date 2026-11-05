@@ -22,9 +22,9 @@ struct BookFormatTests {
         #expect(BookFormat(url: url) == .epub)
     }
 
-    @Test func onlyEpubPdfAndCbzRenderNatively() {
+    @Test func onlyEpubAndPdfRenderNatively() {
         let native = BookFormat.allCases.filter(\.isRenderedNatively)
-        #expect(Set(native) == [.epub, .pdf, .cbz])
+        #expect(Set(native) == [.epub, .pdf])
     }
 
     @Test func extensionsAreUniqueAcrossFormats() {
