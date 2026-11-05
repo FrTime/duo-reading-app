@@ -1,75 +1,52 @@
-import ImageIO
 import SwiftUI
 import UIKit
 
-/// Decodes and downsamples cover images off the main thread, caching the
-/// results so scrolling a large library doesn't decode full-size covers.
-final class CoverThumbnailCache: @unchecked Sendable {
-    static let shared = CoverThumbnailCache()
-    // NSCache is thread-safe.
-    private let cache = NSCache<NSString, UIImage>()
-
-    init() { cache.countLimit = 300 }
-
-    func image(for id: UUID, data: Data, maxPixel: Int) async -> UIImage? {
-        let key = "\(id.uuidString)-\(maxPixel)" as NSString
-        if let hit = cache.object(forKey: key) { return hit }
-        let image = await Task.detached(priority: .userInitiated) {
-            Self.downsample(data, maxPixel: maxPixel)
-        }.value
-        if let image { cache.setObject(image, forKey: key) }
-        return image
-    }
-
-    func removeAll() { cache.removeAllObjects() }
-
-    static func downsample(_ data: Data, maxPixel: Int) -> UIImage? {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
-        let thumbOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
-        ] as CFDictionary
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions) else { return nil }
-        return UIImage(cgImage: cgImage)
-    }
-}
-
-/// A book's cover, or a generated one with its title when the file has none.
+/// A book's front cover at 2:3, from `CoverLibrary`: the user's design, the
+/// file's own artwork, or a generated cover. It redraws when the cover is
+/// edited. Used by the grid, the list, the shelf card, the cover editor and
+/// the outer display.
 struct BookCoverView: View {
     let book: Book
-    var maxPixel: Int = 400
+    /// Largest side to decode, in pixels. Pass `nil` for the full render
+    /// (1400 px wide, sharp on the Duo's outer display).
+    var maxPixel: Int? = 400
+    var covers: CoverLibrary = .shared
 
     @State private var image: UIImage?
 
     var body: some View {
-        // A fixed 2:3 slot; the cover fills it and anything outside is
-        // cropped, so wide covers (PDF pages, landscape art) don't spill out.
+        let revision = covers.revision(for: book.id)
+        // A fixed 2:3 slot; the cover fills it and anything outside is cropped.
         Color.clear
-            .aspectRatio(2 / 3, contentMode: .fit)
+            .aspectRatio(CoverDesign.frontAspectRatio, contentMode: .fit)
             .overlay {
                 if let image {
                     Image(uiImage: image)
                         .resizable()
+                        .interpolation(.high)
                         .scaledToFill()
                 } else {
-                    GeneratedCover(title: book.title, author: book.authors.first, seed: book.id, compact: maxPixel < 200)
+                    // Shown for the moment it takes to load the cover.
+                    GeneratedCover(title: book.title, author: book.authors.first, seed: book.id, compact: (maxPixel ?? 400) < 200)
                 }
             }
             .clipShape(.rect(cornerRadius: 4))
             .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-            .task(id: book.coverImageData?.count) {
-                guard let data = book.coverImageData else { image = nil; return }
-                image = await CoverThumbnailCache.shared.image(for: book.id, data: data, maxPixel: maxPixel)
+            .task(id: CoverKey(id: book.id, revision: revision, maxPixel: maxPixel)) {
+                image = await covers.image(.front, for: book, maxPixels: maxPixel)
             }
             .accessibilityHidden(true)
     }
+
+    private struct CoverKey: Equatable {
+        var id: UUID
+        var revision: Int
+        var maxPixel: Int?
+    }
 }
 
-/// A plain cloth-style cover in a colour picked from the book's id, so each
-/// book keeps the same colour. The cover builder (#39) replaces this.
+/// A plain cloth-style placeholder in a colour picked from the book's id,
+/// shown while the real cover loads.
 struct GeneratedCover: View {
     let title: String
     let author: String?

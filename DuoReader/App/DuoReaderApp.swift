@@ -26,6 +26,10 @@ struct DuoReaderApp: App {
                 try? LibraryStore.readopt(into: container)
             }
         }
+        // Cover designs live outside the store, so remove them with the book.
+        LibraryActions.onDelete.append { id in
+            Task { await CoverLibrary.shared.deleteCovers(for: id) }
+        }
     }
 
     var body: some Scene {
