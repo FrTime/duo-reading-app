@@ -67,13 +67,15 @@ struct LibraryView: View {
         .sensoryFeedback(.success, trigger: importController.summary) { _, new in
             new?.isQuietSuccess == true
         }
-        .confirmationDialog(
+        // An alert rather than a confirmation dialog: on the wide display a
+        // dialog becomes a popover anchored to the whole library, with no Cancel.
+        .alert(
             "Delete “\(bookPendingDelete?.title ?? "")”?",
             isPresented: Binding(get: { bookPendingDelete != nil }, set: { if !$0 { bookPendingDelete = nil } }),
-            titleVisibility: .visible,
             presenting: bookPendingDelete
         ) { book in
             Button("Delete Book", role: .destructive) { delete(book) }
+            Button("Cancel", role: .cancel) { bookPendingDelete = nil }
         } message: { _ in
             Text("The book, its file and its highlights will be removed from this iPhone.")
         }

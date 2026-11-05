@@ -45,23 +45,26 @@ struct BookCoverView: View {
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                GeneratedCover(title: book.title, author: book.authors.first, seed: book.id)
+        // A fixed 2:3 slot; the cover fills it and anything outside is
+        // cropped, so wide covers (PDF pages, landscape art) don't spill out.
+        Color.clear
+            .aspectRatio(2 / 3, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    GeneratedCover(title: book.title, author: book.authors.first, seed: book.id, compact: maxPixel < 200)
+                }
             }
-        }
-        .aspectRatio(2 / 3, contentMode: .fit)
-        .clipShape(.rect(cornerRadius: 4))
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-        .task(id: book.coverImageData?.count) {
-            guard let data = book.coverImageData else { image = nil; return }
-            image = await CoverThumbnailCache.shared.image(for: book.id, data: data, maxPixel: maxPixel)
-        }
-        .accessibilityHidden(true)
+            .clipShape(.rect(cornerRadius: 4))
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+            .task(id: book.coverImageData?.count) {
+                guard let data = book.coverImageData else { image = nil; return }
+                image = await CoverThumbnailCache.shared.image(for: book.id, data: data, maxPixel: maxPixel)
+            }
+            .accessibilityHidden(true)
     }
 }
 
@@ -71,6 +74,8 @@ struct GeneratedCover: View {
     let title: String
     let author: String?
     let seed: UUID
+    /// Small thumbnails show just the title's initial, since words won't fit.
+    var compact = false
 
     private static let palette: [Color] = [
         Color(red: 0.42, green: 0.17, blue: 0.18), Color(red: 0.13, green: 0.27, blue: 0.40),
@@ -82,21 +87,27 @@ struct GeneratedCover: View {
         let index = Int(seed.uuid.0) % Self.palette.count
         ZStack {
             Self.palette[index]
-            VStack(spacing: 6) {
-                Text(title)
-                    .font(.system(.caption, design: .serif, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(5)
-                    .minimumScaleFactor(0.6)
-                if let author {
-                    Text(author)
-                        .font(.system(.caption2, design: .serif))
-                        .lineLimit(2)
-                        .opacity(0.8)
+            if compact {
+                Text(LibraryQuery.sortKey(forTitle: title).first.map(String.init) ?? "")
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+            } else {
+                VStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(.caption, design: .serif, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(5)
+                        .minimumScaleFactor(0.6)
+                    if let author {
+                        Text(author)
+                            .font(.system(.caption2, design: .serif))
+                            .lineLimit(2)
+                            .opacity(0.8)
+                    }
                 }
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(10)
             }
-            .foregroundStyle(.white.opacity(0.92))
-            .padding(10)
         }
     }
 }
