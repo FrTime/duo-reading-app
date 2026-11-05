@@ -32,6 +32,17 @@ final class ImportController {
         Task {
             let outcomes = await importer.importFiles(urls)
             isImporting = false
+            show(outcomes)
+        }
+    }
+
+    /// Shows a batch's summary. If an earlier summary is still on screen
+    /// (say two files were opened in a row), the two are combined into one
+    /// alert, so no result is lost behind the first.
+    func show(_ outcomes: [ImportOutcome]) {
+        if let current = summary, !current.isQuietSuccess {
+            summary = ImportSummary(outcomes: current.outcomes + outcomes)
+        } else {
             summary = ImportSummary(outcomes: outcomes)
         }
     }
@@ -40,6 +51,7 @@ final class ImportController {
 /// A short, human summary of an import batch.
 struct ImportSummary: Identifiable, Equatable {
     let id = UUID()
+    let outcomes: [ImportOutcome]
     let imported: [String]
     let duplicates: [String]
     let failures: [(fileName: String, reason: ImportFailure)]
@@ -54,6 +66,7 @@ struct ImportSummary: Identifiable, Equatable {
             case .failed(let name, let reason): failures.append((name, reason))
             }
         }
+        self.outcomes = outcomes
         self.imported = imported
         self.duplicates = duplicates
         self.failures = failures
@@ -73,6 +86,16 @@ struct ImportSummary: Identifiable, Equatable {
         if imported.isEmpty && failures.isEmpty {
             return String(localized: "Already in your library")
         }
+        if imported.isEmpty && duplicates.isEmpty {
+            return failures.count == 1
+                ? String(localized: "Couldn’t import “\(failures[0].fileName)”")
+                : String(localized: "Couldn’t import \(failures.count) files")
+        }
+        if !failures.isEmpty {
+            return failures.count == 1
+                ? String(localized: "1 file couldn’t be imported")
+                : String(localized: "\(failures.count) files couldn’t be imported")
+        }
         return String(localized: "Import finished")
     }
 
@@ -87,6 +110,10 @@ struct ImportSummary: Identifiable, Equatable {
         }
         if !duplicates.isEmpty {
             lines.append(String(localized: "Already in your library: \(duplicates.joined(separator: ", "))"))
+        }
+        // A single failure is named in the title; just say why.
+        if failures.count == 1, imported.isEmpty, duplicates.isEmpty {
+            return failures[0].reason.explanation
         }
         for failure in failures {
             lines.append("\(failure.fileName): \(failure.reason.explanation)")

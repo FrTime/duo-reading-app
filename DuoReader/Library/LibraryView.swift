@@ -101,7 +101,7 @@ struct LibraryView: View {
             ContentUnavailableView {
                 Label("Your shelf is empty", systemImage: "books.vertical")
             } description: {
-                Text("Import EPUB or PDF files from Files, or drag them here.")
+                Text("Import books from Files, or drag them here. EPUB, PDF, Kindle, Word, FictionBook, comics, text and web pages all work.")
             } actions: {
                 Button("Import Books") { showingPicker = true }
                     .buttonStyle(.borderedProminent)

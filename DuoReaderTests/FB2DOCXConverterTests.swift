@@ -144,6 +144,13 @@ struct DOCXConverterTests {
         #expect(doc.title == "Body Title")
     }
 
+    @Test func aLeadingHeadingTitlesADocumentWithNoTitle() {
+        let parsed = DOCXConverter.blocks(fromDocument: Data(Self.documentXML.utf8), styleNames: [:])
+        #expect(DOCXConverter.leadingHeading([.heading(level: 1, text: "Garden Plans"), .paragraph(inline: "x")]) == "Garden Plans")
+        #expect(DOCXConverter.leadingHeading([.paragraph(inline: "x"), .heading(level: 1, text: "Later")]) == nil)
+        #expect(!parsed.blocks.isEmpty)
+    }
+
     @Test func textBoxesKeepTheSurroundingTextAndAreNotDoubled() async throws {
         let body = """
         <w:document xmlns:w="w" xmlns:mc="mc" xmlns:wps="wps" xmlns:v="v"><w:body>

@@ -151,6 +151,49 @@ struct ImportSummaryTests {
         #expect(s.message.contains("B"))
         #expect(s.message.contains("x.mobi"))
     }
+
+    @Test func failureTitlesSayWhatWentWrong() {
+        let one = ImportSummary(outcomes: [.failed(fileName: "empty.epub", reason: .unreadable)])
+        #expect(one.title == "Couldn’t import “empty.epub”")
+        #expect(one.message == ImportFailure.unreadable.explanation)
+
+        let two = ImportSummary(outcomes: [
+            .failed(fileName: "a.epub", reason: .unreadable),
+            .failed(fileName: "b.zip", reason: .unsupportedFormat),
+        ])
+        #expect(two.title == "Couldn’t import 2 files")
+        #expect(two.message.contains("a.epub") && two.message.contains("b.zip"))
+
+        let mixed = ImportSummary(outcomes: [
+            .imported(PersistentIdentifierStub.make(), title: "A"),
+            .failed(fileName: "b.zip", reason: .unsupportedFormat),
+        ])
+        #expect(mixed.title == "1 file couldn’t be imported")
+        #expect(mixed.message.contains("Added: 1"))
+    }
+
+    @Test func aResultArrivingWhileAnAlertIsUpIsCombinedNotLost() throws {
+        let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
+                                          booksFolder: Fixtures.temporaryURL("Books"))
+        controller.show([.failed(fileName: "empty.epub", reason: .unreadable)])
+        controller.show([.failed(fileName: "fake.epub", reason: .unreadable)])
+        let summary = try #require(controller.summary)
+        #expect(summary.title == "Couldn’t import 2 files")
+        #expect(summary.message.contains("empty.epub") && summary.message.contains("fake.epub"))
+
+        // Once dismissed, the next batch starts fresh.
+        controller.summary = nil
+        controller.show([.failed(fileName: "notes.zip", reason: .unsupportedFormat)])
+        #expect(controller.summary?.title == "Couldn’t import “notes.zip”")
+    }
+
+    @Test func aQuietSuccessIsNotCarriedIntoTheNextAlert() throws {
+        let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
+                                          booksFolder: Fixtures.temporaryURL("Books"))
+        controller.show([.imported(PersistentIdentifierStub.make(), title: "A")])
+        controller.show([.failed(fileName: "notes.zip", reason: .unsupportedFormat)])
+        #expect(controller.summary?.imported.isEmpty == true)
+    }
 }
 
 /// A real PersistentIdentifier for summary tests, from a throwaway store.

@@ -30,7 +30,7 @@ public struct DOCXConverter: BookConverter {
         let parsed = Self.blocks(fromDocument: body, styleNames: styles)
         let levels = parsed.blocks.compactMap { if case .heading(let level, _) = $0 { level } else { nil } }
         var document = EPUBDocument(
-            title: core["title"] ?? parsed.title ?? BookConverters.title(for: url),
+            title: core["title"] ?? parsed.title ?? Self.leadingHeading(parsed.blocks) ?? BookConverters.title(for: url),
             authors: (core["creator"] ?? "").split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
             chapters: TextBlock.chapters(from: parsed.blocks, splitLevel: levels.min())
         )
@@ -38,6 +38,12 @@ public struct DOCXConverter: BookConverter {
         let plain = parsed.blocks.prefix(40).compactMap { if case .paragraph(let inline) = $0 { inline } else { nil } }.joined(separator: " ")
         if let language = core["language"] ?? BookConverters.detectLanguage(plain) { document.language = language }
         return document
+    }
+
+    /// A document that opens with a heading is usually titled by it, when
+    /// neither the properties nor a Title paragraph name it.
+    static func leadingHeading(_ blocks: [TextBlock]) -> String? {
+        if case .heading(_, let text)? = blocks.first { text } else { nil }
     }
 
     // MARK: - Styles and properties
