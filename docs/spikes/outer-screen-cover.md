@@ -29,7 +29,7 @@ a session running so the cover stays on the outer screen.
 | Toggle `isEnabled` off / on | Scene disconnects and the outer panel goes dark / scene reconnects and the cover returns. Clean mapping for a user setting. |
 | `ExternalNonInteractiveAccessory` | Never available. It's for real external displays (AirPlay, cable), not the cover panel. |
 | Legacy `UIWindow.screen = outer` | A screen-based scene connects but nothing draws; the outer panel stays black. Dead end. |
-| Fold state across a simulator reboot | Persists. A rebooted "open" Duo comes back open and unlocked. |
+| Fold state across a simulator reboot | Kept only while Device Hub stays open. After Device Hub quit, a reboot came back closed. A rebooted Duo comes back unlocked. |
 
 ![Outer panel of the open Duo simulator showing the prototype cover](images/outer-cover-open-simulator.png)
 

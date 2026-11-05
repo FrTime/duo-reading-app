@@ -85,18 +85,24 @@ xcodebuild test -project DuoReader.xcodeproj -scheme DuoReader \
 Nothing on the command line can move the Duo's hinge (`simctl` and `devicectl`
 don't), and Xcode 27.1 has no Simulator.app. Only Device Hub
 (`Xcode-27.1.0.app/Contents/Applications/DeviceHub.app`) has the hinge slider.
-The fold position **persists per simulator across reboots**, so there's one
-simulator per pose, set once by hand:
+
+**The fold position is not stored in the simulator.** It survived a reboot
+while Device Hub stayed open, but a simulator rebooted after Device Hub quit
+came back closed, and relaunching Device Hub didn't restore it. So keep one
+simulator per pose, leave Device Hub running, and re-set the hinge after the
+Mac restarts or Device Hub quits. Before trusting a pose, check it: in a
+folded Duo only the outer display (`--display=1`) is lit, and the inner one
+(`--display=3`) screenshots black.
 
 | Simulator | Pose | One-time setup |
 | --- | --- | --- |
 | `iPhone Duo (closed)` | folded, app on the outer screen | none (new Duos start closed) |
-| `iPhone Duo (open)` | fully open, app on the inner screen | Device Hub: drag the hinge slider to fully open |
-| `iPhone Duo (half open)` | partially open, book / tabletop | Device Hub: drag the hinge slider to about 90° |
+| `iPhone Duo (open)` | fully open, app on the inner screen | Device Hub: drag the hinge slider to fully open (redo after Device Hub quits) |
+| `iPhone Duo (half open)` | partially open, book / tabletop | Device Hub: drag the hinge slider to about 90° (redo after Device Hub quits) |
 | `iPhone Duo` | whatever the last person left it in | shared; don't rely on its pose |
 
 Pick one by name: `-destination 'platform=iOS Simulator,name=iPhone Duo (open)'`.
-If a pose sim gets moved, reset it in Device Hub. Recreate a missing one with
+If a pose sim is in the wrong pose, ask Tim to reset it in Device Hub and test the rest meanwhile. Recreate a missing one with
 `xcrun simctl create "iPhone Duo (open)" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo com.apple.CoreSimulator.SimRuntime.iOS-27-1`.
 
 - **Orientation is scriptable:**
