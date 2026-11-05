@@ -201,7 +201,7 @@ struct ShelfView: View {
         return min(left, right)...max(left, right)
     }
 
-    static func verticalFold(in proxy: GeometryProxy) -> CGRect? {
+    nonisolated static func verticalFold(in proxy: GeometryProxy) -> CGRect? {
         guard let frame = proxy.reservedRegions(kind: .division).first?.frame,
               frame.height > frame.width
         else { return nil }

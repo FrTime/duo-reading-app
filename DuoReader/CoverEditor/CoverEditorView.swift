@@ -169,7 +169,7 @@ struct CoverEditorView: View {
 
     /// The hinge, when there's room for the stage on one side of it and
     /// the tools on the other.
-    static func usableFold(in proxy: GeometryProxy) -> CGRect? {
+    nonisolated static func usableFold(in proxy: GeometryProxy) -> CGRect? {
         guard let fold = ShelfView.verticalFold(in: proxy),
               fold.minX > 200, proxy.size.width - fold.maxX > 280
         else { return nil }
