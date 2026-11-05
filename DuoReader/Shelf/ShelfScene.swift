@@ -50,24 +50,32 @@ final class ShelfScene {
     /// right. Both ride on the camera, so every shelf is lit the same way as
     /// you scroll.
     private func addLights() {
+        Self.addLights(to: camera, lookingAt: 1.2)
+    }
+
+    /// A warm key light that casts shadows, a cool fill and a soft front
+    /// light, all riding on the camera so the lighting stays put as it moves.
+    /// `distance` is how far ahead of the camera the subject sits.
+    static func addLights(to camera: Entity, lookingAt distance: Float) {
+        let target = SIMD3<Float>(0, 0, -distance)
         let key = DirectionalLight()
         key.light.color = UIColor(red: 1, green: 0.95, blue: 0.86, alpha: 1)
         key.light.intensity = 2600
-        key.shadow = DirectionalLightComponent.Shadow(maximumDistance: 3, depthBias: 1.5)
+        key.shadow = DirectionalLightComponent.Shadow(maximumDistance: max(3, distance * 2.5), depthBias: 1.5)
         camera.addChild(key)
-        key.look(at: SIMD3(0, 0, -1.2), from: SIMD3(-0.7, 0.9, 0.2), relativeTo: camera)
+        key.look(at: target, from: SIMD3(-0.7, 0.9, 0.2), relativeTo: camera)
 
         let fill = DirectionalLight()
         fill.light.color = UIColor(red: 0.85, green: 0.9, blue: 1, alpha: 1)
         fill.light.intensity = 900
         camera.addChild(fill)
-        fill.look(at: SIMD3(0, 0, -1.2), from: SIMD3(0.8, -0.2, 0.4), relativeTo: camera)
+        fill.look(at: target, from: SIMD3(0.8, -0.2, 0.4), relativeTo: camera)
 
         let front = DirectionalLight()
         front.light.color = .white
         front.light.intensity = 700
         camera.addChild(front)
-        front.look(at: SIMD3(0, 0, -1.2), from: SIMD3(0, 0.1, 0.5), relativeTo: camera)
+        front.look(at: target, from: SIMD3(0, 0.1, 0.5), relativeTo: camera)
     }
 
     // MARK: - Camera
@@ -159,13 +167,14 @@ final class ShelfScene {
 
     /// Spine out, rotated so the spine (the box's -x face) points at the camera.
     static func restingTransform(slot: ShelfLayout.Slot, spec: ShelfBookSpec, metrics: ShelfMetrics, mode: ShelfDisplayMode) -> Transform {
-        let y = slot.baseY + metrics.bookHeight / 2
+        let y = slot.baseY + slot.height / 2
         switch mode {
         case .spines:
+            // Spines line up along the front edge, whatever the book's width.
             return Transform(
                 scale: .one,
                 rotation: simd_quatf(angle: .pi / 2, axis: SIMD3(0, 1, 0)),
-                translation: SIMD3(slot.x, y, -metrics.bookWidth / 2 - 0.006)
+                translation: SIMD3(slot.x, y, -metrics.width(of: spec) / 2 - 0.006)
             )
         case .covers:
             return Transform(
@@ -182,7 +191,7 @@ final class ShelfScene {
         Transform(
             scale: SIMD3(repeating: 1.25),
             rotation: simd_quatf(angle: 0.35, axis: SIMD3(0, 1, 0)),
-            translation: SIMD3(slot.x, slot.baseY + metrics.bookHeight / 2 + 0.02, 0.12)
+            translation: SIMD3(slot.x, slot.baseY + slot.height / 2 + 0.02, 0.12)
         )
     }
 
@@ -199,17 +208,17 @@ final class ShelfScene {
 
     private func entity(for state: BookState, metrics: ShelfMetrics) -> ModelEntity {
         let id = state.spec.id
-        if let existing = books[id], bookStates[id]?.spec.thickness == state.spec.thickness {
+        if let existing = books[id], bookStates[id]?.spec == state.spec {
             return existing
         }
         let mesh = MeshResource.generateBox(
-            width: metrics.bookWidth,
-            height: metrics.bookHeight,
+            width: metrics.width(of: state.spec),
+            height: metrics.height(of: state.spec),
             depth: metrics.depth(of: state.spec),
             splitFaces: true
         )
         if let existing = books[id] {
-            // Same book, new thickness: swap the mesh, keep the materials.
+            // Same book, new size: swap the mesh, keep the materials.
             existing.model?.mesh = mesh
             return existing
         }

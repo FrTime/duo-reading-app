@@ -95,14 +95,21 @@ public struct CoverRenderer: Sendable {
         context.setFillColor(design.baseColor.cgColor)
         context.fill(bounds)
         if design.hasImage, design.template.showsImageOnFront, let image {
-            let rect = Self.fillRect(
-                imageSize: image.size, in: bounds,
-                zoom: design.imageZoom, offsetX: design.imageOffsetX, offsetY: design.imageOffsetY
-            )
             context.saveGState()
             context.clip(to: bounds)
             context.interpolationQuality = .high
-            image.draw(in: rect)
+            if design.fitsWholeImage == true {
+                // Letterbox: a blurred, filled copy behind the whole image.
+                if let backdrop = Self.blurred(image) {
+                    backdrop.draw(in: Self.fillRect(imageSize: backdrop.size, in: bounds, zoom: 1, offsetX: 0, offsetY: 0))
+                }
+                image.draw(in: Self.fitRect(imageSize: image.size, in: bounds, zoom: design.imageZoom, offsetX: design.imageOffsetX, offsetY: design.imageOffsetY))
+            } else {
+                image.draw(in: Self.fillRect(
+                    imageSize: image.size, in: bounds,
+                    zoom: design.imageZoom, offsetX: design.imageOffsetX, offsetY: design.imageOffsetY
+                ))
+            }
             context.restoreGState()
         } else if design.template.framesTextFront {
             // A simple double rule so a text-only cover still looks finished.
@@ -338,6 +345,22 @@ public struct CoverRenderer: Sendable {
         return CGRect(
             x: bounds.midX - size.width / 2 - dx * spareX,
             y: bounds.midY - size.height / 2 - dy * spareY,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    /// Where to draw an image so all of it shows inside `bounds`, centred,
+    /// then zoomed and panned like `fillRect`.
+    public static func fitRect(imageSize: CGSize, in bounds: CGRect, zoom: Double, offsetX: Double, offsetY: Double) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return bounds }
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height) * max(zoom, 1)
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        let spareX = max((size.width - bounds.width) / 2, 0)
+        let spareY = max((size.height - bounds.height) / 2, 0)
+        return CGRect(
+            x: bounds.midX - size.width / 2 - min(max(offsetX, -1), 1) * spareX,
+            y: bounds.midY - size.height / 2 - min(max(offsetY, -1), 1) * spareY,
             width: size.width,
             height: size.height
         )
