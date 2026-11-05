@@ -29,6 +29,11 @@ final class ReaderModel {
     /// Whether the top and bottom bars are showing.
     var isChromeVisible = true
 
+    /// Where docked settings start: the spine (the fold, or the middle of a
+    /// flat screen), in window coordinates. Nil when the screen is too
+    /// narrow to dock them, so they show as a sheet. Set by the view.
+    var settingsSpineX: CGFloat?
+
     /// A web or mail link the reader tapped, waiting for confirmation.
     var pendingExternalURL: URL?
 

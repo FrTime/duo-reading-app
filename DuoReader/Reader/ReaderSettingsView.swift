@@ -11,39 +11,71 @@ struct ReaderSettingsView: View {
     var isReflowable = true
     /// Whether to offer the outer-screen cover, and what to say about it.
     var outerCoverStatus: OuterCoverPolicy.Status = .unsupported
+    /// Closes settings when they're docked in the reader rather than presented.
+    var onDone: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationStack {
-            Form {
-                themeSection
-                if isReflowable {
-                    textSection
-                }
-                layoutSection
-                if isReflowable {
-                    spacingSection
-                }
-                pageTurningSection
-                OuterCoverSettingsSection(status: outerCoverStatus, camera: .shared)
-                Section {
-                    Button("Reset to Defaults", role: .destructive) {
-                        settings = .default
-                    }
-                    .disabled(settings == .default)
-                }
-            }
-            .navigationTitle("Reading Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
+        if let onDone {
+            // Docked beside the page, inside the reader's own navigation
+            // stack: a nested stack's bar would merge into the reader's
+            // (hidden) one, so the title and Done go in a header instead.
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Reading Settings")
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Button(action: onDone) {
                         Label("Done", systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+                form
+            }
+            .accessibilityAction(.escape, onDone)
+        } else {
+            NavigationStack {
+                form
+                    .navigationTitle("Reading Settings")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Label("Done", systemImage: "checkmark")
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    private var form: some View {
+        Form {
+            themeSection
+            if isReflowable {
+                textSection
+            }
+            layoutSection
+            if isReflowable {
+                spacingSection
+            }
+            pageTurningSection
+            OuterCoverSettingsSection(status: outerCoverStatus, camera: .shared)
+            Section {
+                Button("Reset to Defaults", role: .destructive) {
+                    settings = .default
+                }
+                .disabled(settings == .default)
             }
         }
     }

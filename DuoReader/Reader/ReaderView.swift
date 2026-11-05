@@ -70,19 +70,17 @@ struct ReaderView: View {
             ReaderSearchView(model: model)
                 .presentationDetents([.large])
         }
-        // On a wide screen (an open Duo) settings dock at the side so the page
-        // stays visible and live; at compact width the inspector shows as a
-        // sheet. One presenter, so folding or unfolding with settings open
-        // doesn't close them. It sits outside the reader's navigation stack:
-        // inside it, the settings' own title and Done button took over the
-        // reader's bar.
-        .inspector(isPresented: $showingSettings) {
-            ReaderSettingsView(
-                settings: $model.settings,
-                isReflowable: model.isReflowable,
-                outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs)
-            )
-                .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+        // On the open Duo settings dock on the right-hand screen, drawn by
+        // the reader itself (see ReaderSurface) so they meet the crease
+        // exactly; the system inspector lands at widths that vary by pose.
+        // At compact width they show as a sheet. It sits outside the reader's
+        // navigation stack: inside it, the settings' own title and Done
+        // button took over the reader's bar.
+        .sheet(isPresented: Binding(
+            get: { showingSettings && model.settingsSpineX == nil },
+            set: { if !$0 { showingSettings = false } }
+        )) {
+            settingsView(onDone: nil)
                 .presentationDetents([.medium, .large])
                 .presentationBackgroundInteraction(.enabled(upThrough: .medium))
         }
@@ -91,6 +89,13 @@ struct ReaderView: View {
         .task {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
+            #if DEBUG
+            // `-DuoReaderShowSettings` opens settings once the book is open,
+            // for screenshots on simulators where taps don't get through.
+            if ProcessInfo.processInfo.arguments.contains("-DuoReaderShowSettings"), model.state == .ready {
+                showingSettings = true
+            }
+            #endif
         }
         .onChange(of: colorScheme) { _, scheme in
             model.systemIsDark = scheme == .dark
@@ -127,6 +132,15 @@ struct ReaderView: View {
         }
     }
 
+    private func settingsView(onDone: (() -> Void)?) -> ReaderSettingsView {
+        ReaderSettingsView(
+            settings: $model.settings,
+            isReflowable: model.isReflowable,
+            outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs),
+            onDone: onDone
+        )
+    }
+
     private var outerCoverInputs: OuterCoverPolicy.Inputs {
         OuterCoverPolicy.Inputs(
             isEnabled: showsCoverOnOutside,
@@ -146,13 +160,20 @@ struct ReaderView: View {
     }
 
     private var chromeVisibility: Visibility {
-        model.isChromeVisible || model.state != .ready ? .visible : .hidden
+        barsShown || model.state != .ready ? .visible : .hidden
+    }
+
+    /// The bars hide while settings are open: on the open Duo their buttons
+    /// sit in the side rail, where they'd read as part of the settings panel,
+    /// and settings have their own Done button.
+    private var barsShown: Bool {
+        model.isChromeVisible && !showingSettings
     }
 
     /// The scrubber shows with the bars, unless the pose gives the
     /// controls a panel of their own.
     private var showsScrubber: Bool {
-        model.isChromeVisible && model.state == .ready && model.layout?.controlsFrame == nil
+        barsShown && model.state == .ready && model.layout?.controlsFrame == nil
     }
 
     @ViewBuilder
@@ -177,7 +198,13 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            ReaderSurface(model: model) { showingSettings = true }
+            ReaderSurface(
+                model: model,
+                barsShown: barsShown,
+                settingsShown: showingSettings,
+                settings: { settingsView { showingSettings = false } },
+                showSettings: { showingSettings = true }
+            )
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -276,6 +303,10 @@ enum ReaderProgressText {
 /// fold's division region.
 private struct ReaderSurface: View {
     let model: ReaderModel
+    let barsShown: Bool
+    let settingsShown: Bool
+    /// Settings, for docking on the right-hand screen.
+    let settings: () -> ReaderSettingsView
     let showSettings: () -> Void
     /// The side space to keep clear, as the difference between the safe frame
     /// and the edge-to-edge frame. (A view that ignores the safe area reports
@@ -312,11 +343,35 @@ private struct ReaderSurface: View {
                     // Pages start below the title bar. Measured only while it
                     // shows, so hiding it doesn't reflow the page.
                     .onChange(of: safe.frame(in: .global).minY, initial: true) { _, barBottom in
-                        if model.isChromeVisible { model.titleBarBottom = barBottom }
+                        if barsShown { model.titleBarBottom = barBottom }
+                    }
+                    .onChange(of: settingsSpine(in: full), initial: true) { _, spine in
+                        model.settingsSpineX = spine
                     }
             }
             .ignoresSafeArea(.container)
+            // Docked settings, from the spine to the right edge. Laid out in
+            // the safe area so their bar clears the status bar and the rail.
+            .overlay(alignment: .topTrailing) {
+                if settingsShown, let spine = model.settingsSpineX {
+                    let frame = safe.frame(in: .global)
+                    settings()
+                        .frame(width: max(0, frame.maxX - spine))
+                        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: settingsShown)
         }
+    }
+
+    /// Docked settings fill everything right of the spine (the fold, or the
+    /// middle of a flat screen) when the screen is wide enough for two
+    /// pages; otherwise they show as a sheet. `proxy` is edge
+    /// to edge, so its coordinates are the window's.
+    private func settingsSpine(in proxy: GeometryProxy) -> CGFloat? {
+        guard proxy.size.width >= ReaderLayout.automaticSpreadMinWidth else { return nil }
+        return proxy.reservedRegions(kind: .division).first?.frame.midX ?? proxy.size.width / 2
     }
 
     static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {
