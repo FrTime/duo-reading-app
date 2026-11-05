@@ -21,9 +21,12 @@ struct ShelfView: View {
 
     @State private var scene = ShelfScene()
     @State private var viewSize: CGSize = .zero
+    /// The hinge of the open Duo, in this view's points, when it runs top to
+    /// bottom. An upright stands over it so no book straddles the fold.
+    @State private var fold: CGRect?
     @State private var centerY: Float = 0
     @State private var scrollStart: Float?
-    @State private var thicknesses: [UUID: Double] = [:]
+    @State private var sizes: [UUID: BookSize] = [:]
     @State private var selectedID: UUID?
     @State private var held: Held?
     @State private var pickups = 0
@@ -36,14 +39,21 @@ struct ShelfView: View {
         var insertion: Int
     }
 
+    /// Spine thickness and overall size, from each book's cover design.
+    struct BookSize: Equatable {
+        var thickness: Double
+        var heightScale: Double
+    }
+
     private struct SyncKey: Equatable {
         var order: [UUID]
-        var thicknesses: [UUID: Double]
+        var sizes: [UUID: BookSize]
         var revisions: [Int]
         var mode: ShelfDisplayMode
         var selected: UUID?
         var held: Held?
         var size: CGSize
+        var fold: CGRect?
     }
 
     var body: some View {
@@ -53,8 +63,15 @@ struct ShelfView: View {
                 content.add(scene.root)
             }
             .accessibilityHidden(true)
-            .onAppear { resize(to: proxy.size) }
-            .onChange(of: proxy.size) { _, size in resize(to: size) }
+            .onAppear {
+                fold = Self.verticalFold(in: proxy)
+                resize(to: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in
+                fold = Self.verticalFold(in: proxy)
+                resize(to: size)
+            }
+            .onChange(of: Self.verticalFold(in: proxy)) { _, new in fold = new }
         }
         .background { Color(cgColor: ShelfTextures.wall.darkened(0.45).cgColor).ignoresSafeArea() }
         .contentShape(Rectangle())
@@ -121,7 +138,7 @@ struct ShelfView: View {
             refresh(animated: old.size == new.size)
         }
         .onChange(of: reduceMotion) { _, _ in refresh(animated: false) }
-        .task(id: thicknessKey) { await loadThicknesses() }
+        .task(id: sizeKey) { await loadSizes() }
     }
 
     // MARK: - State
@@ -143,21 +160,27 @@ struct ShelfView: View {
     private var syncKey: SyncKey {
         SyncKey(
             order: displayOrder,
-            thicknesses: thicknesses,
+            sizes: sizes,
             revisions: books.map { covers.revision(for: $0.id) },
             mode: mode,
             selected: selectedID,
             held: held,
-            size: viewSize
+            size: viewSize,
+            fold: fold
         )
     }
 
-    private var thicknessKey: [Int] {
+    private var sizeKey: [Int] {
         books.map { covers.revision(for: $0.id) } + [books.count]
     }
 
     private func spec(_ id: UUID) -> ShelfBookSpec {
-        ShelfBookSpec(id: id, thickness: thicknesses[id] ?? 0.12)
+        let size = sizes[id]
+        return ShelfBookSpec(
+            id: id,
+            thickness: size?.thickness ?? 0.12,
+            heightScale: size?.heightScale ?? CoverDesign.defaultHeightScale(for: id)
+        )
     }
 
     private func layout(for ids: [UUID]) -> ShelfLayout {
@@ -165,8 +188,24 @@ struct ShelfView: View {
             books: ids.map(spec),
             mode: mode,
             shelfWidth: camera.shelfWidth,
-            minimumCaseRows: ShelfLayout.rowsToFill(height: camera.halfHeight * 2)
+            minimumCaseRows: ShelfLayout.rowsToFill(height: camera.halfHeight * 2),
+            divider: dividerSpan
         )
+    }
+
+    /// The fold, in scene x along the front of the shelves.
+    private var dividerSpan: ClosedRange<Float>? {
+        guard let fold else { return nil }
+        let left = camera.scenePoint(for: CGPoint(x: fold.minX, y: fold.midY), atZ: 0).x
+        let right = camera.scenePoint(for: CGPoint(x: fold.maxX, y: fold.midY), atZ: 0).x
+        return min(left, right)...max(left, right)
+    }
+
+    nonisolated static func verticalFold(in proxy: GeometryProxy) -> CGRect? {
+        guard let frame = proxy.reservedRegions(kind: .division).first?.frame,
+              frame.height > frame.width
+        else { return nil }
+        return frame
     }
 
     private var scrollRange: ClosedRange<Float> {
@@ -204,13 +243,14 @@ struct ShelfView: View {
         )
     }
 
-    /// Spine widths come from each book's cover design.
-    private func loadThicknesses() async {
+    /// Spine widths and sizes come from each book's cover design.
+    private func loadSizes() async {
         for book in books {
             let design = await covers.design(for: book)
             guard !Task.isCancelled else { return }
-            if thicknesses[book.id] != design.thickness {
-                thicknesses[book.id] = design.thickness
+            let size = BookSize(thickness: design.thickness, heightScale: design.sizeScale(for: book.id))
+            if sizes[book.id] != size {
+                sizes[book.id] = size
             }
         }
     }
@@ -342,7 +382,7 @@ struct ShelfView: View {
         let frames: [AccessibleBook] = books.compactMap { book in
             guard let slot = layout.slot(for: book.id) else { return nil }
             let z: Float = -0.008
-            let topLeft = camera.screenPoint(for: SIMD3(slot.x - slot.footprint / 2, slot.baseY + layout.metrics.bookHeight, z))
+            let topLeft = camera.screenPoint(for: SIMD3(slot.x - slot.footprint / 2, slot.baseY + slot.height, z))
             let bottomRight = camera.screenPoint(for: SIMD3(slot.x + slot.footprint / 2, slot.baseY, z))
             let frame = CGRect(x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y)
             guard frame.intersects(CGRect(origin: .zero, size: viewSize)) else { return nil }

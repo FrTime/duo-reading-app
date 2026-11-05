@@ -23,10 +23,17 @@ public struct ShelfBookSpec: Hashable, Sendable, Identifiable {
     public var id: UUID
     /// Spine width as a fraction of the cover's width (`CoverDesign.thickness`).
     public var thickness: Double
+    /// Size relative to a standard book (`CoverDesign.sizeScale`).
+    public var heightScale: Double
 
-    public init(id: UUID, thickness: Double) {
+    public init(id: UUID, thickness: Double, heightScale: Double = 1) {
         self.id = id
         self.thickness = thickness
+        self.heightScale = heightScale
+    }
+
+    var scale: Float {
+        Float(min(max(heightScale, CoverDesign.heightScaleRange.lowerBound), CoverDesign.heightScaleRange.upperBound))
     }
 }
 
@@ -44,22 +51,28 @@ public struct ShelfMetrics: Hashable, Sendable {
 
     public init() {}
 
+    /// A standard book's cover width. Each book scales this and `bookHeight`.
     public var bookWidth: Float { bookHeight * Float(CoverDesign.frontAspectRatio) }
-    public var rowHeight: Float { bookHeight + headroom + boardThickness }
-    /// How deep the boards are: a book standing spine-out, plus a lip.
-    public var shelfDepth: Float { bookWidth + 0.025 }
+    /// The tallest a book can be, which sets the space between shelves.
+    public var maxBookHeight: Float { bookHeight * Float(CoverDesign.heightScaleRange.upperBound) }
+    public var rowHeight: Float { maxBookHeight + headroom + boardThickness }
+    /// How deep the boards are: the widest book standing spine-out, plus a lip.
+    public var shelfDepth: Float { bookWidth * Float(CoverDesign.heightScaleRange.upperBound) + 0.025 }
+
+    public func height(of book: ShelfBookSpec) -> Float { bookHeight * book.scale }
+    public func width(of book: ShelfBookSpec) -> Float { bookWidth * book.scale }
 
     /// Width of a book along the shelf.
     public func footprint(of book: ShelfBookSpec, mode: ShelfDisplayMode) -> Float {
         switch mode {
-        case .spines: max(bookWidth * Float(book.thickness), 0.006)
-        case .covers: bookWidth
+        case .spines: depth(of: book)
+        case .covers: width(of: book)
         }
     }
 
     /// Thickness of a book's block, front cover to back cover.
     public func depth(of book: ShelfBookSpec) -> Float {
-        max(bookWidth * Float(book.thickness), 0.006)
+        max(width(of: book) * Float(book.thickness), 0.006)
     }
 }
 
@@ -76,6 +89,7 @@ public struct ShelfLayout: Sendable {
         public var baseY: Float
         /// Width along the shelf.
         public var footprint: Float
+        public var height: Float
     }
 
     public let metrics: ShelfMetrics
@@ -89,38 +103,82 @@ public struct ShelfLayout: Sendable {
     /// enough to fill the screen when there are few books.
     public let caseRowCount: Int
 
+    /// Where an upright divides each shelf into two bays, in scene x, if
+    /// anywhere. On the open Duo it stands over the hinge.
+    public let divider: ClosedRange<Float>?
+
     /// `minimumCaseRows` is how many shelves fill the screen; see
-    /// `ShelfLayout.rowsToFill(height:metrics:)`.
-    public init(books: [ShelfBookSpec], mode: ShelfDisplayMode, shelfWidth: Float, minimumCaseRows: Int = 1, metrics: ShelfMetrics = ShelfMetrics()) {
+    /// `ShelfLayout.rowsToFill(height:metrics:)`. `divider` is the span of
+    /// an upright (the fold); books never stand across it.
+    public init(
+        books: [ShelfBookSpec],
+        mode: ShelfDisplayMode,
+        shelfWidth: Float,
+        minimumCaseRows: Int = 1,
+        divider: ClosedRange<Float>? = nil,
+        metrics: ShelfMetrics = ShelfMetrics()
+    ) {
         self.metrics = metrics
         self.mode = mode
         let width = max(shelfWidth, metrics.bookWidth + 2 * metrics.sideMargin)
         self.shelfWidth = width
-        let usable = width - 2 * metrics.sideMargin
         let left = -width / 2 + metrics.sideMargin
+        let right = width / 2 - metrics.sideMargin
+
+        // The bays books stand in. A divider only splits the case when both
+        // bays can hold a face-out book; otherwise it's ignored.
+        var bays: [ClosedRange<Float>] = [left...right]
+        var usedDivider: ClosedRange<Float>?
+        if let divider {
+            let thick = max(divider.upperBound - divider.lowerBound, metrics.boardThickness)
+            let mid = (divider.lowerBound + divider.upperBound) / 2
+            let span = (mid - thick / 2)...(mid + thick / 2)
+            // Check the widths before forming ranges: a range with its ends
+            // the wrong way round traps.
+            let leftEnd = span.lowerBound - metrics.sideMargin
+            let rightStart = span.upperBound + metrics.sideMargin
+            let minimum = metrics.bookWidth * Float(CoverDesign.heightScaleRange.upperBound)
+            if leftEnd - left >= minimum, right - rightStart >= minimum {
+                bays = [left...leftEnd, rightStart...right]
+                usedDivider = span
+            }
+        }
+        self.divider = usedDivider
+
+        // Face-out books spread evenly across each bay; spines pack tight.
+        let gaps: [Float] = bays.map { bay in
+            switch mode {
+            case .spines:
+                return metrics.bookGap
+            case .covers:
+                let usable = bay.upperBound - bay.lowerBound
+                let perRow = Self.perRow(usable, metrics)
+                return max(metrics.coverGap, (usable - perRow * metrics.bookWidth) / perRow)
+            }
+        }
 
         var slots: [Slot] = []
         slots.reserveCapacity(books.count)
         var row = 0
+        var bay = 0
         var cursor: Float = 0
-        // Face-out books spread evenly across the shelf; spines pack tight.
-        let gap: Float
-        switch mode {
-        case .spines:
-            gap = metrics.bookGap
-        case .covers:
-            let perRow = Self.perRow(usable, metrics)
-            gap = max(metrics.coverGap, (usable - perRow * metrics.bookWidth) / perRow)
-        }
         for (index, book) in books.enumerated() {
             let footprint = metrics.footprint(of: book, mode: mode)
-            if cursor > 0, cursor + footprint > usable + 0.0001 {
-                row += 1
+            while cursor > 0, cursor + footprint > bays[bay].upperBound - bays[bay].lowerBound + 0.0001 {
                 cursor = 0
+                bay += 1
+                if bay == bays.count {
+                    bay = 0
+                    row += 1
+                }
             }
-            let x = left + cursor + footprint / 2
-            slots.append(Slot(id: book.id, index: index, row: row, x: x, baseY: Self.baseY(row: row, metrics: metrics), footprint: footprint))
-            cursor += footprint + gap
+            let x = bays[bay].lowerBound + cursor + footprint / 2
+            slots.append(Slot(
+                id: book.id, index: index, row: row, x: x,
+                baseY: Self.baseY(row: row, metrics: metrics),
+                footprint: footprint, height: metrics.height(of: book)
+            ))
+            cursor += footprint + gaps[bay]
         }
         self.slots = slots
         self.rowCount = books.isEmpty ? 1 : row + 1
@@ -142,7 +200,7 @@ public struct ShelfLayout: Sendable {
     }
 
     /// Top of the bookcase (the space above the first shelf's books).
-    public var contentTop: Float { metrics.bookHeight + metrics.headroom }
+    public var contentTop: Float { metrics.maxBookHeight + metrics.headroom }
     /// Bottom of the last board.
     public var contentBottom: Float { Self.baseY(row: rowCount - 1, metrics: metrics) - metrics.boardThickness }
     public var contentHeight: Float { contentTop - contentBottom }
@@ -155,7 +213,7 @@ public struct ShelfLayout: Sendable {
 
     /// The shelf a height falls on, clamped to the shelves in the case.
     public func row(atY y: Float) -> Int {
-        let fromTop = (metrics.bookHeight + metrics.headroom) - y
+        let fromTop = (metrics.maxBookHeight + metrics.headroom) - y
         let row = Int((fromTop / metrics.rowHeight).rounded(.down))
         return min(max(row, 0), caseRowCount - 1)
     }
@@ -180,7 +238,7 @@ public struct ShelfLayout: Sendable {
     public func book(atX x: Float, y: Float) -> UUID? {
         slots.first { slot in
             abs(x - slot.x) <= slot.footprint / 2 + metrics.bookGap / 2
-                && y >= slot.baseY && y <= slot.baseY + metrics.bookHeight
+                && y >= slot.baseY && y <= slot.baseY + slot.height
         }?.id
     }
 }

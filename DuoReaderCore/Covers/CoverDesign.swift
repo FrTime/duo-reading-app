@@ -217,6 +217,12 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// For automatic designs, a fingerprint of the metadata they were built
     /// from, so they can be rebuilt when the metadata changes.
     public var seedFingerprint: String?
+    /// How big the book is next to others, 1 being standard. Nil in designs
+    /// saved before sizes existed; `sizeScale(for:)` fills in a default.
+    public var heightScale: Double?
+    /// Fit the whole image on the front (over a blurred copy of itself)
+    /// instead of filling and cropping. Nil means fill.
+    public var fitsWholeImage: Bool?
 
     public init(
         template: CoverTemplate,
@@ -248,6 +254,25 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     }
 
     public var hasImage: Bool { imageSource != .none }
+
+    /// Book sizes the user can pick, relative to a standard paperback.
+    public static let heightScaleRange = 0.8...1.15
+
+    /// The book's size: the user's choice, or a small, stable variation per
+    /// book so a shelf isn't a row of identical blocks.
+    public func sizeScale(for bookID: UUID) -> Double {
+        if let heightScale {
+            return min(max(heightScale, Self.heightScaleRange.lowerBound), Self.heightScaleRange.upperBound)
+        }
+        return Self.defaultHeightScale(for: bookID)
+    }
+
+    /// 0.93 to 1.05, picked from the book's ID so it never changes.
+    public static func defaultHeightScale(for bookID: UUID) -> Double {
+        let bytes = bookID.uuid
+        let value = (Int(bytes.0) << 8 | Int(bytes.1)) % 1000
+        return 0.93 + Double(value) / 999 * 0.12
+    }
 
     public func textBoxes(on face: CoverFace) -> [CoverTextBox] {
         textBoxes.filter { $0.face == face }
