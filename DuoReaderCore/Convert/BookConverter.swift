@@ -40,6 +40,8 @@ public enum BookConverters {
         case .markdown: MarkdownConverter()
         case .rtf: RTFConverter()
         case .html: HTMLConverter()
+        case .fb2: FB2Converter()
+        case .docx: DOCXConverter()
         default: nil
         }
     }
