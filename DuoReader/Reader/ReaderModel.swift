@@ -75,7 +75,8 @@ final class ReaderModel {
     /// (PDFs and fixed layouts, which fill the screen).
     func pageInsets(for navigator: VisualNavigator) -> UIEdgeInsets? {
         if isFixedLayout {
-            return fixedPageInsets.map { UIEdgeInsets(top: $0.top, left: $0.side, bottom: $0.bottom, right: $0.side) }
+            let insets = fixedPageInsets
+            return UIEdgeInsets(top: insets.top, left: insets.side, bottom: insets.bottom, right: insets.side)
         }
         guard isReflowable, let view = (navigator as? UIViewController)?.view,
               let window = view.window else { return nil }
@@ -89,16 +90,12 @@ final class ReaderModel {
         return UIEdgeInsets(top: insets.top, left: safe.left, bottom: insets.bottom, right: safe.right)
     }
 
-    /// Insets for comic and other fixed-layout pages: the safe area that
-    /// lies over the page view, which is nothing at the sides when the
-    /// layout has already moved the page clear of the Duo's rail.
-    var fixedPageInsets: FixedLayoutInsets? {
-        guard let view = navigator?.view, let window = view.window else { return nil }
-        return PageInsets.fixedLayout(
-            pageFrame: view.convert(view.bounds, to: window),
-            safeFrame: window.bounds.inset(by: window.safeAreaInsets)
-        )
-    }
+    /// Insets for comic and other fixed-layout pages: none. Comics run edge
+    /// to edge, under the Duo's side rail and the status bar, like a printed
+    /// page; the bars draw over them while they show. Readium's default
+    /// kept the window's whole safe area clear, which on the Duo took the
+    /// rail off both sides and left bands in every page size mode.
+    var fixedPageInsets: FixedLayoutInsets { .zero }
 
     /// Readium's page gutter, fixed so the fold gap can be worked out from it.
     static let pageGutter: CGFloat = 20

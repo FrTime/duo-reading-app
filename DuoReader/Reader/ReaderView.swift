@@ -381,7 +381,8 @@ private struct ReaderSurface: View {
                 let measured = Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global))
                 let kept = railInsets?.size == full.size ? railInsets?.insets : nil
                 let insets = Self.widest(measured, kept)
-                surface(in: full, insets: insets)
+                // Comics run edge to edge, under the rail too; text keeps clear.
+                surface(in: full, insets: model.isFixedLayout ? .zero : insets)
                     .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
                         railInsets = new
                     }

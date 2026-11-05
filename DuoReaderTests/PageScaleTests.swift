@@ -128,23 +128,4 @@ struct PageScaleTests {
         #expect(store.scale(for: a) == nil)
         #expect(store.scale(for: b) == .stretch)
     }
-
-    // MARK: - Insets
-
-    @Test func fixedPagesBesideTheRailKeepNoSideInset() {
-        // Open Duo: the window's safe area has a 78 pt rail on the right, and
-        // the layout already put the page left of it.
-        let safe = CGRect(x: 0, y: 24, width: 1000 - 78, height: 900 - 24 - 20)
-        let pageFrame = CGRect(x: 78, y: 0, width: 844, height: 900)
-        let insets = PageInsets.fixedLayout(pageFrame: pageFrame, safeFrame: safe)
-        #expect(insets == FixedLayoutInsets(top: 24, side: 0, bottom: 20))
-    }
-
-    @Test func fixedPagesUnderANotchKeepItClearOnBothSides() {
-        // Closed Duo on its side: the notch is on the left.
-        let safe = CGRect(x: 59, y: 0, width: 860 - 118, height: 400 - 21)
-        let pageFrame = CGRect(x: 0, y: 0, width: 860, height: 400)
-        let insets = PageInsets.fixedLayout(pageFrame: pageFrame, safeFrame: safe)
-        #expect(insets == FixedLayoutInsets(top: 0, side: 59, bottom: 21))
-    }
 }

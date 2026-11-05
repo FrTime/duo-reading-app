@@ -142,7 +142,7 @@ final class ReaderPageViewController: UIViewController {
         pageScaler.apply(
             model.pageScale,
             in: navigator.view,
-            insets: model.fixedPageInsets ?? .zero,
+            insets: model.fixedPageInsets,
             rightToLeft: model.isRightToLeft,
             force: force
         )

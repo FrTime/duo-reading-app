@@ -41,32 +41,9 @@ public struct PageInsets: Equatable, Sendable {
             bottom: max(windowBottom, minimum).rounded(.up)
         )
     }
-
-    /// Insets for fixed-layout pages (comics): only the part of the window's
-    /// safe area that actually lies over the page view.
-    ///
-    /// Readium's default insets a fixed page by the window's whole safe area,
-    /// even when the reader has already placed the page clear of it. On the
-    /// open Duo that took the side rail off both sides of a page that was
-    /// already beside the rail, shrinking comics for nothing.
-    ///
-    /// Left and right come out equal, the larger of the two, as Readium
-    /// makes them to keep pages centred.
-    ///
-    /// - Parameters:
-    ///   - pageFrame: The page view's frame, in window coordinates.
-    ///   - safeFrame: The window's safe area, in window coordinates.
-    public static func fixedLayout(pageFrame: CGRect, safeFrame: CGRect) -> FixedLayoutInsets {
-        let side = max(0, safeFrame.minX - pageFrame.minX, pageFrame.maxX - safeFrame.maxX)
-        return FixedLayoutInsets(
-            top: max(0, safeFrame.minY - pageFrame.minY).rounded(.up),
-            side: side.rounded(.up),
-            bottom: max(0, pageFrame.maxY - safeFrame.maxY).rounded(.up)
-        )
-    }
 }
 
-/// See `PageInsets.fixedLayout(pageFrame:safeFrame:)`.
+/// Space kept clear around fixed-layout pages, with equal left and right.
 public struct FixedLayoutInsets: Equatable, Sendable {
     public var top: CGFloat
     /// Both the left and the right.
