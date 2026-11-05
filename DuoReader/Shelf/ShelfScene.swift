@@ -38,6 +38,9 @@ final class ShelfScene {
     }
 
     var reduceMotion = false
+    /// Called whenever the scene changes, so a view that stops drawing a
+    /// still scene (`ShelfRenderView`) knows to draw again.
+    var onActivity: (() -> Void)?
 
     init() {
         camera.camera.fieldOfViewInDegrees = ShelfCamera.fieldOfViewDegrees
@@ -84,6 +87,7 @@ final class ShelfScene {
     // MARK: - Camera
 
     func setCamera(_ state: ShelfCamera, animated: Bool) {
+        onActivity?()
         let transform = Transform(translation: state.position)
         if animated, !reduceMotion {
             camera.move(to: transform, relativeTo: root, duration: 0.45, timingFunction: .easeOut)
@@ -105,6 +109,7 @@ final class ShelfScene {
         coverFor: (UUID) -> Book?,
         animated: Bool
     ) {
+        onActivity?()
         Task { await buildCaseIfNeeded(layout) }
 
         let ids = Set(states.map(\.spec.id))
@@ -156,6 +161,7 @@ final class ShelfScene {
 
     /// Brings a book right up to the camera, as if opening it.
     func animateOpen(_ id: UUID, camera state: ShelfCamera) {
+        onActivity?()
         guard let entity = books[id], !reduceMotion else { return }
         let target = Transform(
             scale: SIMD3(repeating: 1.6),
@@ -275,7 +281,7 @@ final class ShelfScene {
         textureTasks[id]?.cancel()
         frontSizes[id] = frontPixels
         let covers = CoverLibrary.shared
-        textureTasks[id] = Task { [weak entity] in
+        textureTasks[id] = Task { [weak self, weak entity] in
             let front = await covers.image(.front, for: book, maxPixels: frontPixels)
             let spine = await covers.image(.spine, for: book, maxPixels: Self.spinePixels)
             let back = await covers.image(.back, for: book, maxPixels: Self.backPixels)
@@ -286,6 +292,7 @@ final class ShelfScene {
             let materials = Self.materials(front: frontMaterial, spine: spineMaterial, back: backMaterial)
             guard !Task.isCancelled, let entity else { return }
             entity.model?.materials = materials
+            self?.onActivity?()
         }
     }
 
@@ -359,5 +366,6 @@ final class ShelfScene {
         )
         top.position = SIMD3(0, layout.contentTop + m.boardThickness / 2, -depth / 2)
         caseRoot.addChild(top)
+        onActivity?()
     }
 }
