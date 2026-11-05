@@ -235,12 +235,12 @@ struct ReaderModelTests {
         let stored = try #require(try fresh.fetch(FetchDescriptor<Book>(predicate: #Predicate { $0.id == bookID })).first)
         #expect(stored.progress == 0.75)
         let saved = try #require(ReaderModel.savedLocator(stored.readingLocator))
-        #expect(saved.href == locator.href)
+        #expect(saved.href.isEquivalentTo(locator.href))
         #expect(saved.locations.progression == 0.5)
 
         let second = ReaderModel(book: stored, booksFolder: folder)
         await second.load(in: fresh)
-        #expect(second.navigator?.currentLocation?.href == locator.href)
+        #expect(second.navigator?.currentLocation?.href.isEquivalentTo(locator.href) == true)
         second.close()
     }
 
