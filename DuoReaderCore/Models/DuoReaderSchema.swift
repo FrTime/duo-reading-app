@@ -53,30 +53,33 @@ public enum LibraryStore {
     }
 
     /// Opens the library, and if the store can't be opened (corrupt, or from a
-    /// build with an incompatible schema), moves it aside, starts a fresh one
-    /// and puts the books from `booksFolder` back on the shelf. The user keeps
+    /// build with an incompatible schema), moves it aside and starts a fresh
+    /// one. The caller then puts the books back with `readopt(booksIn:into:)`
+    /// off the main thread, so a big library can't stall launch. The user keeps
     /// their books; what's lost is only what lived in the store (reading
     /// positions, highlights), and the old store is kept for support.
-    @MainActor
-    public static func openOrRecover(
-        url: URL = defaultStoreURL,
-        booksFolder: URL = LibraryImporter.defaultBooksFolder
-    ) throws -> OpenResult {
+    public static func openOrRecover(url: URL = defaultStoreURL) throws -> OpenResult {
         do {
             return OpenResult(container: try makeContainer(url: url), recoveredFrom: nil)
         } catch {
             let backup = try moveAside(storeAt: url)
-            let container = try makeContainer(url: url)
-            try readopt(booksIn: booksFolder, into: container.mainContext)
-            return OpenResult(container: container, recoveredFrom: backup)
+            return OpenResult(container: try makeContainer(url: url), recoveredFrom: backup)
         }
     }
 
-    /// Moves the store and its -shm/-wal companions into `Recovered/<timestamp>/`.
+    /// How many old stores to keep in `Recovered/`.
+    static let backupsKept = 3
+
+    /// Moves the store and its -shm/-wal companions into `Recovered/<timestamp>/`,
+    /// then deletes all but the newest `backupsKept` backups.
     static func moveAside(storeAt url: URL) throws -> URL {
         let fm = FileManager.default
         let stamp = ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-")
-        let folder = url.deletingLastPathComponent().appending(path: "Recovered/\(stamp)", directoryHint: .isDirectory)
+        let recovered = url.deletingLastPathComponent().appending(path: "Recovered", directoryHint: .isDirectory)
+        var folder = recovered.appending(path: stamp, directoryHint: .isDirectory)
+        if fm.fileExists(atPath: folder.path()) {
+            folder = recovered.appending(path: "\(stamp)-\(UUID().uuidString.prefix(8))", directoryHint: .isDirectory)
+        }
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         for suffix in ["", "-shm", "-wal"] {
             let file = URL(fileURLWithPath: url.path() + suffix)
@@ -84,16 +87,32 @@ public enum LibraryStore {
                 try fm.moveItem(at: file, to: folder.appending(path: file.lastPathComponent))
             }
         }
+        // ISO 8601 stamps sort by name in time order.
+        let backups = ((try? fm.contentsOfDirectory(at: recovered, includingPropertiesForKeys: nil)) ?? [])
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        for old in backups.dropLast(backupsKept) where old != folder {
+            try? fm.removeItem(at: old)
+        }
         return folder
     }
 
     /// Recreates a `Book` for every file already in the books folder, keeping
     /// its id (the file's UUID name) so other features' files still match.
-    @MainActor
-    static func readopt(booksIn folder: URL, into context: ModelContext) throws {
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+    /// Shelf order follows when each file was added. Runs on its own context,
+    /// so call it off the main thread; it saves in batches so the shelf fills
+    /// in as it goes.
+    public static func readopt(
+        booksIn folder: URL = LibraryImporter.defaultBooksFolder,
+        into container: ModelContainer
+    ) throws {
+        let context = ModelContext(container)
+        let keys: Set<URLResourceKey> = [.creationDateKey]
+        let files = ((try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: Array(keys))) ?? [])
+            .map { ($0, (try? $0.resourceValues(forKeys: keys).creationDate) ?? .distantPast) }
+            .sorted { ($0.1, $0.0.lastPathComponent) < ($1.1, $1.0.lastPathComponent) }
         var order = 0
-        for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+        for (file, _) in files {
             guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
                   let format = BookFormat(url: file),
                   let reader = MetadataReaders.reader(for: format),
@@ -103,6 +122,7 @@ public enum LibraryStore {
             book.apply((try? reader.readMetadata(from: file)) ?? BookMetadata(), fileURL: file)
             context.insert(book)
             order += 1
+            if order.isMultiple(of: 20) { try context.save() }
         }
         try context.save()
     }

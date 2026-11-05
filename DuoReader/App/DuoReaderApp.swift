@@ -19,6 +19,13 @@ struct DuoReaderApp: App {
         container = opened.container
         _recoveredLibrary = State(initialValue: opened.recoveredFrom != nil)
         _importController = State(initialValue: ImportController(container: opened.container))
+        if opened.recoveredFrom != nil {
+            // Rebuild the shelf after launch, off the main thread.
+            let container = opened.container
+            Task.detached(priority: .userInitiated) {
+                try? LibraryStore.readopt(into: container)
+            }
+        }
     }
 
     var body: some Scene {
