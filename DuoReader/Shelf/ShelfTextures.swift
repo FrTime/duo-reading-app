@@ -5,7 +5,11 @@ import UIKit
 /// bundled, so there are no third-party assets to license.
 enum ShelfTextures {
     static let wood = RGBAColor(red: 0.55, green: 0.38, blue: 0.24)
-    static let wall = RGBAColor(red: 0.30, green: 0.21, blue: 0.14)
+    /// The back panels: a little lighter than before, so dark covers stand
+    /// out against them.
+    static let wall = RGBAColor(red: 0.34, green: 0.24, blue: 0.16)
+    /// Behind the bookcase, and the launch screen's colour.
+    static let background = RGBAColor(red: 0.165, green: 0.116, blue: 0.077)
 
     /// A board's face: warm wood with long, gently wavy grain in lighter and
     /// darker streaks, a few knots' worth of colour variation, and a lit top

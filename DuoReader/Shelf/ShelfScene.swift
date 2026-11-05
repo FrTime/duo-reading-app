@@ -29,7 +29,7 @@ final class ShelfScene {
     /// The front texture size each book was last loaded at.
     private var frontSizes: [UUID: Int] = [:]
     private var caseKey: CaseKey?
-    private var caseMaterials: (board: PhysicallyBasedMaterial, upright: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: PhysicallyBasedMaterial)?
+    private var caseMaterials: (board: PhysicallyBasedMaterial, upright: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: UnlitMaterial)?
 
     private struct CaseKey: Equatable {
         var rows: Int
@@ -306,7 +306,9 @@ final class ShelfScene {
         if caseMaterials == nil {
             let board = await ShelfTextures.material(from: ShelfTextures.boardImage(), fallback: ShelfTextures.wood, roughness: 0.45)
             let back = await ShelfTextures.material(from: ShelfTextures.backPanelImage(), fallback: ShelfTextures.wall, roughness: 0.7)
-            let wall = ShelfTextures.solid(ShelfTextures.wall.darkened(0.45), roughness: 0.9)
+            // Unlit, in exactly the colour behind the view, so the wall meets
+            // the screen edges and the status column without a seam.
+            let wall = UnlitMaterial(color: UIColor(cgColor: ShelfTextures.background.cgColor))
             let upright = await ShelfTextures.material(from: ShelfTextures.uprightImage(), fallback: ShelfTextures.wood, roughness: 0.45)
             caseMaterials = (board, upright, back, wall)
         }

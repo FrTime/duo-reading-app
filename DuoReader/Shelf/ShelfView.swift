@@ -60,7 +60,7 @@ struct ShelfView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ShelfRenderView(scene: scene, background: UIColor(cgColor: ShelfTextures.wall.darkened(0.45).cgColor))
+            ShelfRenderView(scene: scene, background: UIColor(cgColor: ShelfTextures.background.cgColor))
                 .accessibilityHidden(true)
             .onAppear {
                 fold = Self.verticalFold(in: proxy)
@@ -72,7 +72,7 @@ struct ShelfView: View {
             }
             .onChange(of: Self.verticalFold(in: proxy)) { _, new in fold = new }
         }
-        .background { Color(cgColor: ShelfTextures.wall.darkened(0.45).cgColor).ignoresSafeArea() }
+        .background { Color(cgColor: ShelfTextures.background.cgColor).ignoresSafeArea() }
         .contentShape(Rectangle())
         .onTapGesture(coordinateSpace: .local) { location in tap(at: location) }
         .gesture(LongPressDragGesture { phase, location in longPress(phase, at: location) })
