@@ -114,11 +114,8 @@ public struct CoverRenderer: Sendable {
             context.setLineWidth(max(bounds.width * 0.0015, 1))
             context.stroke(bounds.insetBy(dx: inset * 1.25, dy: inset * 1.25))
         } else {
-            // Frameless fronts get one short rule in the accent colour.
-            let rule = design.accentColor.contrastRatio(with: design.baseColor) >= 1.8
-                ? design.accentColor
-                : design.baseColor.contrastingText
-            context.setFillColor(rule.cgColor)
+            // Frameless fronts get one short rule in the text colour.
+            context.setFillColor(design.baseColor.contrastingText.cgColor.copy(alpha: 0.6) ?? design.baseColor.contrastingText.cgColor)
             context.fill(CGRect(x: bounds.width * 0.1, y: bounds.height * 0.53, width: bounds.width * 0.22, height: max(bounds.height * 0.008, 2)))
         }
     }
@@ -132,8 +129,6 @@ public struct CoverRenderer: Sendable {
             let width = blurred.size.width * height / max(blurred.size.height, 1)
             context.interpolationQuality = .high
             blurred.draw(in: CGRect(x: 0, y: 0, width: max(width, bounds.width), height: height))
-            context.setFillColor(UIColor.black.withAlphaComponent(0.1).cgColor)
-            context.fill(bounds)
         }
         if design.template == .clothbound {
             // Pairs of gilt bands near the head and foot.
@@ -156,7 +151,7 @@ public struct CoverRenderer: Sendable {
             context.interpolationQuality = .high
             blurred.draw(in: Self.fillRect(imageSize: blurred.size, in: bounds, zoom: 1, offsetX: 0, offsetY: 0))
             context.restoreGState()
-            context.setFillColor(UIColor.black.withAlphaComponent(0.28).cgColor)
+            context.setFillColor(UIColor.black.withAlphaComponent(0.18).cgColor)
             context.fill(bounds)
         }
     }

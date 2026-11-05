@@ -232,7 +232,7 @@ struct CoverTemplateTests {
         let design = CoverTemplate.minimal.makeDesign(seed: CoverFixtures.seed(), palette: blue, imageSource: .embedded)
         #expect(design.backColor != .cream)
         #expect(design.backColor.blue > design.backColor.red)
-        #expect(design.backColor.luminance > 0.6)
+        #expect(design.backColor.luminance > 0.4)
     }
 
     @Test func defaultTemplateDependsOnArtwork() {

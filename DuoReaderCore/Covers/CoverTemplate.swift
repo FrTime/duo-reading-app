@@ -141,7 +141,7 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
             return Colors(front: image ? palette.base : cloth, spine: cloth, back: cloth, accent: .gold)
         case .minimal:
             // With art, a pale tint of it; without, plain cream.
-            let paper = image ? palette.base.mixed(with: .cream, amount: 0.82) : .cream
+            let paper = image ? palette.base.mixed(with: .cream, amount: 0.7) : .cream
             return Colors(front: image ? palette.base : .cream, spine: paper, back: paper, accent: palette.accent)
         case .typographic:
             return Colors(front: palette.base, spine: palette.base, back: palette.base, accent: palette.accent)
@@ -219,12 +219,13 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
             ))
         }
 
-        // Back: title, blurb, author.
+        // Back: title, blurb, author, aligned like the front.
+        let backAlign: CoverTextAlignment = framesTextFront ? .center : .leading
         boxes.append(CoverTextBox(
             face: .back, role: .title, text: seed.title,
             centerY: 0.11, width: 0.8, height: 0.1,
             font: font, weight: .bold, fontSize: 0.065, color: backText,
-            isUppercased: uppercase, hasShadow: shadow
+            alignment: backAlign, isUppercased: uppercase, hasShadow: shadow
         ))
         if let blurb = seed.blurb {
             boxes.append(CoverTextBox(
@@ -239,7 +240,7 @@ public enum CoverTemplate: String, Codable, CaseIterable, Sendable, Identifiable
                 face: .back, role: .author, text: seed.authorLine,
                 centerY: 0.88, width: 0.84, height: 0.07,
                 font: font, weight: .medium, fontSize: 0.04, color: backText,
-                isUppercased: true, hasShadow: shadow
+                alignment: backAlign, isUppercased: true, hasShadow: shadow
             ))
         }
         return boxes
