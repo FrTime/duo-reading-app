@@ -133,11 +133,13 @@ public struct ShelfLayout: Sendable {
             let thick = max(divider.upperBound - divider.lowerBound, metrics.boardThickness)
             let mid = (divider.lowerBound + divider.upperBound) / 2
             let span = (mid - thick / 2)...(mid + thick / 2)
-            let leftBay = left...(span.lowerBound - metrics.sideMargin)
-            let rightBay = (span.upperBound + metrics.sideMargin)...right
+            // Check the widths before forming ranges: a range with its ends
+            // the wrong way round traps.
+            let leftEnd = span.lowerBound - metrics.sideMargin
+            let rightStart = span.upperBound + metrics.sideMargin
             let minimum = metrics.bookWidth * Float(CoverDesign.heightScaleRange.upperBound)
-            if leftBay.upperBound - leftBay.lowerBound >= minimum, rightBay.upperBound - rightBay.lowerBound >= minimum {
-                bays = [leftBay, rightBay]
+            if leftEnd - left >= minimum, right - rightStart >= minimum {
+                bays = [left...leftEnd, rightStart...right]
                 usedDivider = span
             }
         }
