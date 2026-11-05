@@ -35,7 +35,7 @@ struct OuterCoverAccessory: ViewModifier {
 
 /// The reader's half of the outer cover: tracks the hinge, starts and stops
 /// the minimal camera session the accessory needs, and shows that session's
-/// small preview. The reader works the same without any of it.
+/// invisible preview layer. The reader works the same without any of it.
 struct OuterCoverCameraControl: ViewModifier {
     @Binding var hinge: OuterCoverPolicy.Hinge
     let camera: OuterCoverCamera
@@ -46,19 +46,20 @@ struct OuterCoverCameraControl: ViewModifier {
             .onHingeChange { _, context in
                 hinge = Self.hinge(from: context)
             }
-            .overlay(alignment: .bottomTrailing) {
+            .background(alignment: .bottomTrailing) {
+                // iOS only presents the accessory while a preview of the
+                // running session is in the window (with no preview layer the
+                // outer screen stays dark on a real Duo). A 1 pt, fully
+                // transparent preview satisfies that without showing anyone a
+                // selfie. The system's camera indicator still shows.
                 if camera.isRunning {
                     OuterCoverCameraPreview(session: camera.session)
-                        .frame(width: 32, height: 32)
-                        .clipShape(.circle)
-                        .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
-                        .padding(12)
-                        .accessibilityLabel(Text("Camera on to show the cover on the outside"))
-                        .accessibilityAddTraits(.isImage)
-                        .transition(.opacity)
+                        .frame(width: 1, height: 1)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: camera.isRunning)
             .onChange(of: shouldRunCamera, initial: true) { _, run in
                 camera.setRunning(run)
             }

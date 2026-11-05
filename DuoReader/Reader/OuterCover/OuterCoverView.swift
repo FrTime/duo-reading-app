@@ -66,7 +66,7 @@ struct OuterCoverSettingsSection: View {
         case .blocked:
             "Camera access is off for Duo Reader, so the cover can't show on the outside. iOS only lets apps use the outer screen while the camera is on."
         default:
-            "While the Duo is open, people around you see this book's cover on the outer screen. iOS only allows this while the camera is on, so a small preview and the camera indicator appear and it uses some extra battery. Nothing is recorded or saved."
+            "While the Duo is open, people around you see this book's cover on the outer screen. iOS only allows this while the camera is on, so the camera indicator shows and it uses some extra battery. Nothing is shown, recorded or saved."
         }
     }
 }

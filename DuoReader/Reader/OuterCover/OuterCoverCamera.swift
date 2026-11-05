@@ -10,7 +10,8 @@ import UIKit
 /// capture session, so the cover needs one. This is the cheapest session that
 /// counts: the front camera at the `.low` preset and its lowest frame rate,
 /// with no outputs. No frame ever reaches the app, and nothing is recorded or
-/// saved; the only consumer is the small preview the reader shows.
+/// saved; the only consumer is an invisible 1 pt preview layer, which iOS
+/// needs in the window before it presents the accessory.
 @MainActor
 @Observable
 final class OuterCoverCamera {
@@ -98,7 +99,8 @@ private struct SendableSession: @unchecked Sendable {
     init(_ value: AVCaptureSession) { self.value = value }
 }
 
-/// The small live preview a running capture session should have on screen.
+/// The preview layer a running capture session needs in the window. The reader
+/// keeps it 1 pt and transparent (see `OuterCoverCameraControl`).
 struct OuterCoverCameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
