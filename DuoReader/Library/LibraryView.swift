@@ -2,19 +2,20 @@ import SwiftData
 import SwiftUI
 
 enum LibraryLayout: String, CaseIterable, Identifiable {
-    case grid, list
+    case shelf, grid, list
     var id: String { rawValue }
 }
 
-/// The library as a grid or list, with search, sorting, delete and import.
-/// The 3D shelf (#33) will sit beside this as another mode.
+/// The library as a 3D shelf (the default), a grid or a list, with search,
+/// sorting, delete and import. The shelf always shows the user's own
+/// arrangement; while searching, results show in the grid.
 struct LibraryView: View {
     @Query private var allBooks: [Book]
     @Environment(\.modelContext) private var modelContext
     @Environment(ImportController.self) private var importController
 
     @AppStorage("library.sort") private var sort: LibrarySort = .shelf
-    @AppStorage("library.layout") private var layout: LibraryLayout = .grid
+    @AppStorage("library.layout") private var layout: LibraryLayout = .shelf
     @State private var searchText = ""
     @State private var showingPicker = false
     @State private var isDropTargeted = false
@@ -103,7 +104,10 @@ struct LibraryView: View {
             ContentUnavailableView.search(text: searchText)
         } else {
             switch layout {
-            case .grid: grid
+            case .shelf where searchText.isEmpty:
+                ShelfView(onOpen: open, onDelete: { bookPendingDelete = $0 })
+                    .ignoresSafeArea(edges: .bottom)
+            case .shelf, .grid: grid
             case .list: list
             }
         }
@@ -165,6 +169,7 @@ struct LibraryView: View {
                     }
                 }
                 Picker("View As", selection: $layout) {
+                    Label("Shelf", systemImage: "books.vertical").tag(LibraryLayout.shelf)
                     Label("Grid", systemImage: "square.grid.2x2").tag(LibraryLayout.grid)
                     Label("List", systemImage: "list.bullet").tag(LibraryLayout.list)
                 }
