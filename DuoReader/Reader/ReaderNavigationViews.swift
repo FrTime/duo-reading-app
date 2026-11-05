@@ -172,7 +172,7 @@ private struct SystemSearchField: ViewModifier {
     let onSubmit: () -> Void
 
     @ViewBuilder
-    func body(content: Content) -> some View {
+    func body(content: Self.Content) -> some View {
         if isEnabled {
             content
                 .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Words or a phrase")
