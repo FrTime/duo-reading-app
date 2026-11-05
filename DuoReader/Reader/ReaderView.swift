@@ -112,10 +112,6 @@ struct ReaderView: View {
             }
         case .ready:
             ReaderSurface(model: model) { showingSettings = true }
-                // Edge to edge: Readium insets the page for the top and bottom
-                // safe areas itself, and the layout keeps the page clear of
-                // the side rail while centring a spread on the hinge.
-                .ignoresSafeArea(.container)
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -176,6 +172,8 @@ struct ReaderProgressLabel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                // Bars propose a narrow width; show the whole line.
+                .fixedSize()
         }
         .accessibilityElement(children: .combine)
     }
@@ -201,22 +199,33 @@ enum ReaderProgressText {
 private struct ReaderSurface: View {
     let model: ReaderModel
     let showSettings: () -> Void
-    @Environment(\.layoutDirection) private var layoutDirection
-
-    /// The layout works in physical left and right, the way the Duo's panels are.
-    private func sideInsets(_ insets: EdgeInsets) -> ReaderLayout.SideInsets {
-        layoutDirection == .rightToLeft
-            ? ReaderLayout.SideInsets(left: insets.trailing, right: insets.leading)
-            : ReaderLayout.SideInsets(left: insets.leading, right: insets.trailing)
+    /// The side space to keep clear, as the difference between the safe frame
+    /// and the edge-to-edge frame. (A view that ignores the safe area reports
+    /// zero insets, so they're measured this way.) Global coordinates are
+    /// physical left to right, as the Duo's panels are.
+    private static func sideInsets(safe: CGRect, full: CGRect) -> ReaderLayout.SideInsets {
+        ReaderLayout.SideInsets(left: max(0, safe.minX - full.minX), right: max(0, full.maxX - safe.maxX))
     }
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { safe in
+            // Edge to edge: Readium insets the page for the top and bottom
+            // safe areas itself, and the layout keeps the page clear of the
+            // side rail while centring a spread on the hinge.
+            GeometryReader { full in
+                surface(in: full, insets: Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global)))
+            }
+            .ignoresSafeArea(.container)
+        }
+    }
+
+    private func surface(in proxy: GeometryProxy, insets: ReaderLayout.SideInsets) -> some View {
+        Group {
             let fold = proxy.reservedRegions(kind: .division).first?.frame
             let layout = ReaderLayout.resolve(
                 size: proxy.size,
                 fold: fold,
-                insets: sideInsets(proxy.safeAreaInsets),
+                insets: insets,
                 spread: model.settings.spread,
                 flow: model.settings.flow
             )
