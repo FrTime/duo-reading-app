@@ -193,15 +193,6 @@ struct ReaderView: View {
     @ViewBuilder
     private var content: some View {
         switch model.state {
-        case .loading:
-            ProgressView("Opening \(model.book.title)…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // The bar shows while the book opens, so where it ends is
-                // known before the first page is laid out (see PageInsets).
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
-                    model.titleBarBottom = $0
-                }
-                .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
         case .failed(let error):
             ContentUnavailableView {
                 Label(String(localized: error.title), systemImage: "book.closed")
@@ -211,7 +202,10 @@ struct ReaderView: View {
                 Button("Back to Library") { dismiss() }
                     .buttonStyle(.borderedProminent)
             }
-        case .ready:
+        case .loading, .ready:
+            // The surface works out the layout while the book opens, so the
+            // navigator starts with the right number of pages instead of
+            // re-paginating once it appears.
             ReaderSurface(
                 model: model,
                 barsShown: barsShown,
@@ -399,11 +393,18 @@ private struct ReaderSurface: View {
                 flow: model.settings.flow
             )
             ZStack(alignment: .topLeading) {
-                NavigatorHost(model: model, settings: model.settings)
-                    .frame(width: layout.pageFrame.width, height: layout.pageFrame.height)
-                    .offset(x: layout.pageFrame.minX, y: layout.pageFrame.minY)
+                Group {
+                    if model.state == .ready {
+                        NavigatorHost(model: model, settings: model.settings)
+                    } else {
+                        ProgressView("Opening \(model.book.title)…")
+                            .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
+                    }
+                }
+                .frame(width: layout.pageFrame.width, height: layout.pageFrame.height)
+                .offset(x: layout.pageFrame.minX, y: layout.pageFrame.minY)
 
-                if let controls = layout.controlsFrame {
+                if let controls = layout.controlsFrame, model.state == .ready {
                     ReaderSidePanel(model: model, pose: layout.pose, showSettings: showSettings)
                         .frame(width: controls.width, height: controls.height)
                         .offset(x: controls.minX, y: controls.minY)

@@ -133,6 +133,17 @@ final class ReaderModel {
         self.settingsStore = settingsStore
         // Start new readers at their Dynamic Type size.
         settings = settingsStore.load(firstRunFontScale: UIFontMetrics.default.scaledValue(for: 1))
+        #if DEBUG
+        // `-DuoReaderTheme <theme>` and `-DuoReaderFont <font>` override the
+        // settings for this session (not saved), for screenshots.
+        let arguments = ProcessInfo.processInfo.arguments
+        func argument(_ name: String) -> String? {
+            guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return nil }
+            return arguments[index + 1]
+        }
+        if let theme = argument("-DuoReaderTheme").flatMap(ReaderTheme.init(rawValue:)) { settings.theme = theme }
+        if let font = argument("-DuoReaderFont").flatMap(ReaderFont.init(rawValue:)) { settings.font = font }
+        #endif
         progression = book.progress
     }
 
@@ -401,7 +412,13 @@ final class ReaderModel {
     // MARK: - Search
 
     /// Runs a full-text search, returning up to `limit` matches.
-    func search(_ query: String, limit: Int = 500) async -> [Locator] {
+    /// - Parameter onProgress: Called with the results so far after each
+    ///   page of matches, so the list can fill in while the search runs.
+    func search(
+        _ query: String,
+        limit: Int = 500,
+        onProgress: (@MainActor ([Locator]) -> Void)? = nil
+    ) async -> [Locator] {
         guard let publication, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         nonisolated(unsafe) let source = publication
         guard case let .success(iterator) = await source.search(query: query) else { return [] }
@@ -411,6 +428,7 @@ final class ReaderModel {
         while results.count < limit, !Task.isCancelled {
             guard case let .success(page?) = await pages.next() else { break }
             results += page.locators
+            if !Task.isCancelled { onProgress?(Array(results.prefix(limit))) }
         }
         return Task.isCancelled ? [] : Array(results.prefix(limit))
     }

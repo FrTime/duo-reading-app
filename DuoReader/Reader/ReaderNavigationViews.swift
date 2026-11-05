@@ -107,7 +107,7 @@ struct ReaderSearchView: View {
 
     @ViewBuilder
     private var resultsList: some View {
-        if isSearching {
+        if isSearching && results.isEmpty {
             ProgressView("Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if searchedQuery.isEmpty {
@@ -119,26 +119,30 @@ struct ReaderSearchView: View {
         } else if results.isEmpty {
             ContentUnavailableView.search(text: searchedQuery)
         } else {
-            List(Array(results.enumerated()), id: \.offset) { _, locator in
-                Button {
-                    Task {
-                        await model.go(to: locator)
-                        model.highlightSearchResult(locator)
-                        close()
+            List {
+                Section {
+                    ForEach(Array(results.enumerated()), id: \.offset) { _, locator in
+                        Button {
+                            Task {
+                                await model.go(to: locator)
+                                model.highlightSearchResult(locator)
+                                close()
+                            }
+                        } label: {
+                            SearchResultRow(locator: locator)
+                        }
+                        .foregroundStyle(.primary)
                     }
-                } label: {
-                    SearchResultRow(locator: locator)
+                } header: {
+                    HStack(spacing: 6) {
+                        Text("^[\(results.count) result](inflect: true)")
+                        if isSearching {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .accessibilityLabel("Still searching")
+                        }
+                    }
                 }
-                .foregroundStyle(.primary)
-            }
-            .safeAreaInset(edge: .top) {
-                Text("^[\(results.count) result](inflect: true)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.vertical, 4)
-                    .background(.bar)
             }
         }
     }
@@ -154,11 +158,14 @@ struct ReaderSearchView: View {
         // can't overwrite newer results.
         searchTask?.cancel()
         isSearching = true
+        results = []
+        searchedQuery = text
         searchTask = Task {
-            let found = await model.search(text)
+            // Matches show as each page of them arrives, so a long book
+            // doesn't sit on a spinner.
+            let found = await model.search(text) { results = $0 }
             guard !Task.isCancelled else { return }
             results = found
-            searchedQuery = text
             isSearching = false
         }
     }
