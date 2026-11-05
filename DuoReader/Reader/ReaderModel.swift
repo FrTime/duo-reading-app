@@ -133,6 +133,23 @@ final class ReaderModel {
         self.settingsStore = settingsStore
         // Start new readers at their Dynamic Type size.
         settings = settingsStore.load(firstRunFontScale: UIFontMetrics.default.scaledValue(for: 1))
+        #if DEBUG
+        // `-DuoReaderTheme <theme>` and `-DuoReaderFont <font>` override the
+        // settings for this session (not saved), for screenshots.
+        let arguments = ProcessInfo.processInfo.arguments
+        func argument(_ name: String) -> String? {
+            guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return nil }
+            return arguments[index + 1]
+        }
+        if let theme = argument("-DuoReaderTheme").flatMap(ReaderTheme.init(rawValue:)) {
+            settings.theme = theme
+            savesSettings = false
+        }
+        if let font = argument("-DuoReaderFont").flatMap(ReaderFont.init(rawValue:)) {
+            settings.font = font
+            savesSettings = false
+        }
+        #endif
         progression = book.progress
     }
 
@@ -249,6 +266,10 @@ final class ReaderModel {
         ReadiumPreferences.pdf(settings, systemIsDark: systemIsDark, spread: ReadiumPreferences.spread(pages: layout?.columns ?? 1))
     }
 
+    /// False while DEBUG launch arguments override the settings, so the
+    /// override isn't saved over the reader's own choices.
+    @ObservationIgnored private var savesSettings = true
+
     /// Saves and applies settings shortly after the last change, so dragging
     /// a slider doesn't re-paginate the book on every tick.
     private func scheduleSettingsUpdate() {
@@ -264,7 +285,7 @@ final class ReaderModel {
     func commitSettings() {
         settingsUpdate?.cancel()
         settingsUpdate = nil
-        settingsStore.save(settings)
+        if savesSettings { settingsStore.save(settings) }
         applySettings()
     }
 
@@ -401,7 +422,13 @@ final class ReaderModel {
     // MARK: - Search
 
     /// Runs a full-text search, returning up to `limit` matches.
-    func search(_ query: String, limit: Int = 500) async -> [Locator] {
+    /// - Parameter onProgress: Called with the results so far after each
+    ///   page of matches, so the list can fill in while the search runs.
+    func search(
+        _ query: String,
+        limit: Int = 500,
+        onProgress: (@MainActor ([Locator]) -> Void)? = nil
+    ) async -> [Locator] {
         guard let publication, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         nonisolated(unsafe) let source = publication
         guard case let .success(iterator) = await source.search(query: query) else { return [] }
@@ -411,6 +438,7 @@ final class ReaderModel {
         while results.count < limit, !Task.isCancelled {
             guard case let .success(page?) = await pages.next() else { break }
             results += page.locators
+            if !Task.isCancelled { onProgress?(Array(results.prefix(limit))) }
         }
         return Task.isCancelled ? [] : Array(results.prefix(limit))
     }
