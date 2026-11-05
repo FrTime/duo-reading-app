@@ -10,6 +10,7 @@ struct ReaderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -30,6 +31,23 @@ struct ReaderView: View {
             if phase != .active { model.flush() }
         }
         .onDisappear { model.close() }
+        .confirmationDialog(
+            "Open This Link?",
+            isPresented: Binding(
+                get: { model.pendingExternalURL != nil },
+                set: { if !$0 { model.pendingExternalURL = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: model.pendingExternalURL
+        ) { url in
+            Button("Open in \(url.scheme == "mailto" ? String(localized: "Mail") : String(localized: "Safari"))") {
+                openURL(url)
+                model.pendingExternalURL = nil
+            }
+            Button("Cancel", role: .cancel) { model.pendingExternalURL = nil }
+        } message: { url in
+            Text(url.host() ?? url.absoluteString)
+        }
     }
 
     private var chromeVisibility: Visibility {
@@ -54,22 +72,16 @@ struct ReaderView: View {
         case .ready:
             NavigatorHost(model: model)
                 .ignoresSafeArea()
-                .accessibilityAction(named: Text("Next Page")) {
+                // VoiceOver reads the book as one scrolling chapter (Readium
+                // switches to scroll mode for it), so these move by chapter.
+                .accessibilityAction(named: Text("Next Chapter")) {
                     Task { await model.goForward() }
                 }
-                .accessibilityAction(named: Text("Previous Page")) {
+                .accessibilityAction(named: Text("Previous Chapter")) {
                     Task { await model.goBackward() }
                 }
                 .accessibilityAction(named: Text(model.isChromeVisible ? "Hide Controls" : "Show Controls")) {
                     model.isChromeVisible.toggle()
-                }
-                .accessibilityScrollAction { edge in
-                    Task {
-                        switch edge {
-                        case .trailing, .bottom: await model.goForward()
-                        case .leading, .top: await model.goBackward()
-                        }
-                    }
                 }
         }
     }

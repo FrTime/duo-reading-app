@@ -1,5 +1,6 @@
 import Foundation
 import ReadiumShared
+import ReadiumZIPFoundation
 import SwiftData
 import Testing
 @testable import DuoReader
@@ -66,25 +67,34 @@ private final class Counter {
 
 @MainActor
 struct SaveThrottleTests {
-    @Test func coalescesRequestsIntoOneSave() async throws {
+    @Test func coalescesRequestsIntoOneSave() async {
         let counter = Counter()
-        let throttle = SaveThrottle(interval: .milliseconds(50)) { counter.value += 1 }
+        let throttle = SaveThrottle(interval: .milliseconds(10)) { counter.value += 1 }
         for _ in 0 ..< 10 { throttle.request() }
         #expect(throttle.hasPendingSave)
         #expect(counter.value == 0)
-        try await Task.sleep(for: .milliseconds(300))
+        await throttle.waitForPendingSave()
         #expect(counter.value == 1)
         #expect(!throttle.hasPendingSave)
     }
 
-    @Test func flushSavesImmediatelyAndCancelsPending() async throws {
+    @Test func flushSavesImmediatelyAndCancelsPending() async {
         let counter = Counter()
-        let throttle = SaveThrottle(interval: .milliseconds(50)) { counter.value += 1 }
+        let throttle = SaveThrottle(interval: .seconds(60)) { counter.value += 1 }
         throttle.request()
         throttle.flush()
         #expect(counter.value == 1)
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(counter.value == 1)
+        #expect(!throttle.hasPendingSave)
+    }
+
+    @Test func requestsAfterASaveScheduleAnother() async {
+        let counter = Counter()
+        let throttle = SaveThrottle(interval: .milliseconds(1)) { counter.value += 1 }
+        throttle.request()
+        await throttle.waitForPendingSave()
+        throttle.request()
+        await throttle.waitForPendingSave()
+        #expect(counter.value == 2)
     }
 }
 
@@ -159,8 +169,22 @@ struct PublicationLoaderTests {
         let url = Fixtures.temporaryURL("junk.epub")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("definitely not a book".utf8).write(to: url)
-        await #expect(throws: ReaderOpenError.self) {
+        await #expect(throws: ReaderOpenError.unreadable) {
             _ = try await PublicationLoader().open(url)
+        }
+    }
+
+    @Test func reportsDRM() async throws {
+        // An LCP licence marks the book as protected; Readium refuses to
+        // render it without the licence's key.
+        let epub = try await Self.readableEPUB()
+        let archive = try await ReadiumZIPFoundation.Archive(url: epub, accessMode: .update)
+        let licence = Data(#"{"id":"x","encryption":{"profile":"http://readium.org/lcp/basic-profile"}}"#.utf8)
+        try await archive.addEntry(with: "META-INF/license.lcpl", type: .file, uncompressedSize: Int64(licence.count)) { position, size in
+            licence.subdata(in: Int(position) ..< Int(position) + size)
+        }
+        await #expect(throws: ReaderOpenError.drmProtected) {
+            _ = try await PublicationLoader().open(epub)
         }
     }
 }
@@ -185,6 +209,61 @@ struct ReaderModelTests {
         #expect(model.navigator != nil)
         #expect(book.lastOpened != nil)
         model.close()
+    }
+
+    @Test func savesThePlaceAndReopensThere() async throws {
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let file = try await PublicationLoaderTests.readableEPUB()
+        let book = insertBook(.epub, file: file, in: container.mainContext)
+        try container.mainContext.save()
+        let folder = file.deletingLastPathComponent()
+
+        let first = ReaderModel(book: book, booksFolder: folder)
+        await first.load(in: container.mainContext)
+        let page = try #require(first.publication?.readingOrder.last)
+        let locator = Locator(
+            href: page.url(),
+            mediaType: .xhtml,
+            locations: .init(progression: 0.5, totalProgression: 0.75)
+        )
+        first.locationDidChange(locator)
+        first.close()
+
+        // A fresh context reads what was written to the store.
+        let fresh = ModelContext(container)
+        let bookID = book.id
+        let stored = try #require(try fresh.fetch(FetchDescriptor<Book>(predicate: #Predicate { $0.id == bookID })).first)
+        #expect(stored.progress == 0.75)
+        let saved = try #require(ReaderModel.savedLocator(stored.readingLocator))
+        #expect(saved.href == locator.href)
+        #expect(saved.locations.progression == 0.5)
+
+        let second = ReaderModel(book: stored, booksFolder: folder)
+        await second.load(in: fresh)
+        #expect(second.navigator?.currentLocation?.href == locator.href)
+        second.close()
+    }
+
+    @Test func closingWhileLoadingLeavesNothingOpen() async throws {
+        let container = try LibraryStore.makeContainer(inMemory: true)
+        let file = try await PublicationLoaderTests.readableEPUB()
+        let book = insertBook(.epub, file: file, in: container.mainContext)
+        let model = ReaderModel(book: book, booksFolder: file.deletingLastPathComponent())
+
+        model.close()
+        await model.load(in: container.mainContext)
+
+        #expect(model.navigator == nil)
+        #expect(model.state != .ready)
+    }
+
+    @Test func onlyWebAndMailLinksMayLeaveTheApp() {
+        #expect(ExternalLinkPolicy.allows(URL(string: "https://archiveofourown.org/works/1")!))
+        #expect(ExternalLinkPolicy.allows(URL(string: "HTTP://example.com")!))
+        #expect(ExternalLinkPolicy.allows(URL(string: "mailto:a@b.c")!))
+        #expect(!ExternalLinkPolicy.allows(URL(string: "tel:5551234")!))
+        #expect(!ExternalLinkPolicy.allows(URL(string: "sms:5551234")!))
+        #expect(!ExternalLinkPolicy.allows(URL(string: "someapp://do-something")!))
     }
 
     @Test func failsCleanlyWhenTheFileIsGone() async throws {

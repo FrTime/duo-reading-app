@@ -1,4 +1,4 @@
-import ReadiumNavigator
+@preconcurrency import ReadiumNavigator
 import SwiftUI
 import UIKit
 
@@ -46,8 +46,13 @@ final class ReaderPageViewController: UIViewController {
         view.addSubview(navigator.view)
         navigator.didMove(toParent: self)
 
-        tapObserver = navigator.addObserver(.activate { [weak self] event in
-            guard let self else { return false }
+        // Weak captures: the navigator keeps its observers, so capturing it
+        // strongly here would keep the whole navigator alive after closing.
+        tapObserver = navigator.addObserver(.activate { [weak self, weak navigator] event in
+            guard let self, let navigator else { return false }
+            // VoiceOver users turn pages with VoiceOver's own gestures. A
+            // double-tap on a paragraph near the edge must not turn the page.
+            guard !UIAccessibility.isVoiceOverRunning else { return false }
             await self.handleTap(at: event.location, in: navigator.view.bounds)
             return true
         })

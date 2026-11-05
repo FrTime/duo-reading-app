@@ -1,6 +1,6 @@
 import Foundation
-import ReadiumShared
-import ReadiumStreamer
+@preconcurrency import ReadiumShared
+@preconcurrency import ReadiumStreamer
 
 /// Why a book couldn't be opened for reading.
 enum ReaderOpenError: Error, Equatable {
@@ -75,9 +75,9 @@ final class PublicationLoader {
         switch await assetRetriever.retrieve(url: fileURL) {
         case let .success(retrieved):
             asset = retrieved
-        case .failure(.formatNotSupported), .failure(.schemeNotSupported):
-            throw .unsupportedFormat
-        case .failure(.reading):
+        case .failure:
+            // The format was checked before opening, so a file Readium can't
+            // recognise is damaged rather than unsupported.
             throw .unreadable
         }
 
@@ -85,14 +85,11 @@ final class PublicationLoader {
         switch await opener.open(asset: asset, allowUserInteraction: false) {
         case let .success(opened):
             publication = opened
-        case .failure(.formatNotSupported):
-            throw .unsupportedFormat
-        case .failure(.reading):
+        case .failure:
             throw .unreadable
         }
 
         guard !publication.isRestricted else {
-            publication.close()
             throw .drmProtected
         }
         return publication

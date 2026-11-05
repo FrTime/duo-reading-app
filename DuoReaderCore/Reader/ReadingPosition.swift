@@ -63,4 +63,9 @@ public final class SaveThrottle {
 
     /// Whether a save is waiting to run.
     public var hasPendingSave: Bool { pending != nil }
+
+    /// Waits for the scheduled save, if any, to run. For tests.
+    func waitForPendingSave() async {
+        await pending?.value
+    }
 }
