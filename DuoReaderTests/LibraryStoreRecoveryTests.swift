@@ -23,7 +23,7 @@ struct LibraryStoreRecoveryTests {
         #expect(try second.container.mainContext.fetch(FetchDescriptor<Book>()).map(\.title) == ["Kept"])
     }
 
-    @Test func recoversFromACorruptStoreAndReadoptsBooks() throws {
+    @Test func recoversFromACorruptStoreAndReadoptsBooks() async throws {
         let url = root.appending(path: "Library.store")
         try Data("this is not a sqlite database".utf8).write(to: url)
 
@@ -40,7 +40,7 @@ struct LibraryStoreRecoveryTests {
         #expect(FileManager.default.fileExists(atPath: backup.appending(path: "Library.store").path()))
         #expect(try result.container.mainContext.fetch(FetchDescriptor<Book>()).isEmpty)
 
-        try LibraryStore.readopt(booksIn: books, into: result.container)
+        try await LibraryStore.readopt(booksIn: books, into: result.container)
         let recovered = try ModelContext(result.container).fetch(FetchDescriptor<Book>())
         #expect(recovered.count == 1)
         #expect(recovered.first?.id == id)
@@ -60,7 +60,7 @@ struct LibraryStoreRecoveryTests {
         }
     }
 
-    @Test func readoptKeepsTheOrderBooksWereAdded() throws {
+    @Test func readoptKeepsTheOrderBooksWereAdded() async throws {
         let books = root.appending(path: "Books")
         try FileManager.default.createDirectory(at: books, withIntermediateDirectories: true)
         let titles = ["First", "Second", "Third"]
@@ -74,7 +74,7 @@ struct LibraryStoreRecoveryTests {
                 [.creationDate: Date(timeIntervalSince1970: 1_000_000 + Double(i) * 60)], ofItemAtPath: dest.path())
         }
         let container = try LibraryStore.makeContainer(inMemory: true)
-        try LibraryStore.readopt(booksIn: books, into: container)
+        try await LibraryStore.readopt(booksIn: books, into: container)
 
         let shelf = try ModelContext(container).fetch(FetchDescriptor<Book>(sortBy: [SortDescriptor(\.shelfOrder)]))
         #expect(shelf.map(\.title) == titles)

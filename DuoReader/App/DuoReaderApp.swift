@@ -23,7 +23,7 @@ struct DuoReaderApp: App {
             // Rebuild the shelf after launch, off the main thread.
             let container = opened.container
             Task.detached(priority: .userInitiated) {
-                try? LibraryStore.readopt(into: container)
+                try? await LibraryStore.readopt(into: container)
             }
         }
         // Cover designs live outside the store, so remove them with the book.

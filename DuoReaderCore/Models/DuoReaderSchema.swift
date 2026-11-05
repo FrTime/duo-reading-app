@@ -104,7 +104,7 @@ public enum LibraryStore {
     public static func readopt(
         booksIn folder: URL = LibraryImporter.defaultBooksFolder,
         into container: ModelContainer
-    ) throws {
+    ) async throws {
         let context = ModelContext(container)
         let keys: Set<URLResourceKey> = [.creationDateKey]
         let files = ((try? FileManager.default.contentsOfDirectory(
@@ -119,7 +119,7 @@ public enum LibraryStore {
                   let hash = try? LibraryImporter.sha256(of: file) else { continue }
             let book = Book(id: id, relativeFilePath: file.lastPathComponent, contentHash: hash,
                             format: format, title: "", shelfOrder: order)
-            book.apply((try? reader.readMetadata(from: file)) ?? BookMetadata(), fileURL: file)
+            book.apply((try? await reader.readMetadata(from: file)) ?? BookMetadata(), fileURL: file)
             context.insert(book)
             order += 1
             if order.isMultiple(of: 20) { try context.save() }
