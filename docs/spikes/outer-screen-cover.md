@@ -26,6 +26,7 @@ a session running so the cover stays on the outer screen.
 | `UIScreen.screens` when open | 2 screens: outer 466×678 pt, inner 951×669 pt (@3x). The app's scene moves to the inner one. |
 | `CameraCaptureAccessory`, folded | `available=false`; nothing on the outer screen (the app *is* on the outer screen). |
 | `CameraCaptureAccessory`, fully open, no capture session | `available=true`; a scene with role `UIWindowSceneSessionRoleCameraCaptureAccessory` connects; SpringBoard logs `Scene Accessory CoverDisplay Presented`; the cover renders on the outer panel. |
+| `CameraCaptureAccessory`, half open (~90°, `partiallyOpen`) | Same as fully open: available, cover on the outer panel. Hardware may differ; third-party write-ups say fully open only. |
 | Toggle `isEnabled` off / on | Scene disconnects and the outer panel goes dark / scene reconnects and the cover returns. Clean mapping for a user setting. |
 | `ExternalNonInteractiveAccessory` | Never available. It's for real external displays (AirPlay, cable), not the cover panel. |
 | Legacy `UIWindow.screen = outer` | A screen-based scene connects but nothing draws; the outer panel stays black. Dead end. |
@@ -38,8 +39,6 @@ a session running so the cover stays on the outer screen.
 - **On a real Duo**, with the camera running: that the accessory appears,
   stays up, and how much battery the session costs. The prototype has a
   `-autoCamera` launch flag and a 44 pt circular preview for this test.
-- Half-open (book) pose: does the accessory stay up at `partiallyOpen`?
-  Third-party write-ups say fully open only.
 
 ## Options
 
