@@ -79,10 +79,10 @@ struct LibraryImporterTests {
     }
 
     @Test func rejectsUnsupportedFormats() async throws {
-        let url = Fixtures.temporaryURL("notes.mobi")
+        let url = Fixtures.temporaryURL("notes.cbr")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("x".utf8).write(to: url)
-        #expect(await importer.importFile(url) == .failed(fileName: "notes.mobi", reason: .unsupportedFormat))
+        #expect(await importer.importFile(url) == .failed(fileName: "notes.cbr", reason: .unsupportedFormat))
         #expect(try allBooks().isEmpty)
     }
 

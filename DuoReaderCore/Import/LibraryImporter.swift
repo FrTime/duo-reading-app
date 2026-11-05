@@ -98,7 +98,11 @@ public actor LibraryImporter {
                 try await converter.convert(url, to: temporary)
             } catch {
                 try? FileManager.default.removeItem(at: temporary)
-                let reason: ImportFailure = (error as? ConversionError) == .tooLarge ? .tooLarge : .unreadable
+                let reason: ImportFailure = switch error as? ConversionError {
+                case .tooLarge?: .tooLarge
+                case .drmProtected?: .drmProtected
+                default: .unreadable
+                }
                 return .failed(fileName: fileName, reason: reason)
             }
             convertedCopy = temporary
