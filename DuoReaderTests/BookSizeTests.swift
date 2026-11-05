@@ -113,3 +113,45 @@ struct BookSizeTests {
         #expect(rendered.front.size.width == 300)
     }
 }
+
+struct WebImageSearchTests {
+    @Test func buildsADefaultQuery() {
+        #expect(WebImageSearch.defaultQuery(title: "All the Young Dudes", authors: ["MsKingBean89"]) == "All the Young Dudes MsKingBean89 book cover")
+        #expect(WebImageSearch.defaultQuery(title: " Dune ", authors: []) == "Dune book cover")
+    }
+
+    @Test func buildsASearchURL() throws {
+        let url = try #require(WebImageSearch.searchURL(for: "all the young dudes sirius pov front cover"))
+        #expect(url.scheme == "https")
+        #expect(url.host() == "www.bing.com")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.first { $0.name == "q" }?.value == "all the young dudes sirius pov front cover")
+        #expect(WebImageSearch.searchURL(for: "   ") == nil)
+    }
+
+    @Test func prefersTheFullImageThenTheShownOne() {
+        let candidates = WebImageSearch.candidates(full: "https://example.com/full.jpg", shown: "https://example.com/thumb.jpg")
+        #expect(candidates == [.remote(URL(string: "https://example.com/full.jpg")!), .remote(URL(string: "https://example.com/thumb.jpg")!)])
+    }
+
+    @Test func dropsInsecureAndDuplicateSources() {
+        let candidates = WebImageSearch.candidates(full: "http://example.com/a.jpg", shown: "javascript:alert(1)")
+        #expect(candidates.isEmpty)
+        let same = WebImageSearch.candidates(full: "https://example.com/a.jpg", shown: "https://example.com/a.jpg")
+        #expect(same.count == 1)
+    }
+
+    @Test func decodesInlineImages() {
+        let data = Data([1, 2, 3, 4])
+        let candidates = WebImageSearch.candidates(full: nil, shown: "data:image/png;base64,\(data.base64EncodedString())")
+        #expect(candidates == [.inline(data)])
+        #expect(WebImageSearch.candidates(full: nil, shown: "data:image/svg+xml,<svg/>").isEmpty)
+    }
+
+    @Test func fitsArtFarFromABookShape() {
+        #expect(CoverEditorModel.prefersFitting(CGSize(width: 1600, height: 900)))
+        #expect(!CoverEditorModel.prefersFitting(CGSize(width: 1000, height: 1500)))
+        #expect(!CoverEditorModel.prefersFitting(CGSize(width: 1000, height: 1200)))
+        #expect(!CoverEditorModel.prefersFitting(.zero))
+    }
+}

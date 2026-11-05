@@ -9,6 +9,7 @@ struct CoverImagePanel: View {
 
     @State private var showingSearch = false
     @State private var showingFiles = false
+    @State private var showingWebSearch = false
     @State private var photo: PhotosPickerItem?
 
     var body: some View {
@@ -22,6 +23,14 @@ struct CoverImagePanel: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
+            Button {
+                showingWebSearch = true
+            } label: {
+                Label("Search the web for any image", systemImage: "globe")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
             HStack {
                 PhotosPicker(selection: $photo, matching: .images) {
                     Label("Photos", systemImage: "photo.on.rectangle")
@@ -33,6 +42,10 @@ struct CoverImagePanel: View {
                     Label("Files", systemImage: "folder")
                         .frame(maxWidth: .infinity)
                 }
+                PasteButton(supportedContentTypes: [.image]) { providers in
+                    paste(providers)
+                }
+                .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
 
@@ -92,6 +105,14 @@ struct CoverImagePanel: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showingWebSearch) {
+            WebCoverSearchView(initialQuery: WebImageSearch.defaultQuery(title: searchQuery.title, authors: searchQuery.author.map { [$0] } ?? [])) { data, url in
+                Task {
+                    let source: CoverImageSource = url.map { .search(provider: WebImageSearch.providerName, url: $0) } ?? .userImage
+                    await model.setImage(data, source: source)
+                }
+            }
+        }
         .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.image]) { result in
             guard case .success(let url) = result else { return }
             Task { await importFile(url) }
@@ -126,6 +147,8 @@ struct CoverImagePanel: View {
         case .none: nil
         case .embedded: String(localized: "From the book's file.")
         case .userImage: String(localized: "Your own image.")
+        case .search(let provider, let url) where provider == WebImageSearch.providerName:
+            String(localized: "From \(url.host() ?? "the web").")
         case .search(let provider, _):
             String(localized: "From \(CoverSearchProvider(rawValue: provider)?.displayName ?? provider).")
         }
@@ -140,6 +163,21 @@ struct CoverImagePanel: View {
             return
         }
         await model.setImage(data, source: .userImage)
+    }
+
+    /// An image copied from Safari, Photos or anywhere else.
+    private func paste(_ providers: [NSItemProvider]) {
+        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }) else { return }
+        let model = model
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+            Task { @MainActor in
+                guard let data, data.count <= 30 * 1024 * 1024 else {
+                    model.errorMessage = String(localized: "That image couldn't be pasted.")
+                    return
+                }
+                await model.setImage(data, source: .userImage)
+            }
+        }
     }
 }
 

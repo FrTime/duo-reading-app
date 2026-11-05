@@ -125,9 +125,21 @@ final class CoverEditorModel {
         updated.imageZoom = 1
         updated.imageOffsetX = 0
         updated.imageOffsetY = 0
+        // Art far from a book's shape (wide fan art, say) is fitted whole
+        // rather than cropped hard; the user can switch it back.
+        updated.fitsWholeImage = Self.prefersFitting(decoded.size) ? true : nil
         // "Text only" never shows art, so switch to one that does.
         let template = updated.template.showsImageOnFront ? updated.template : .classic
         design = template.apply(to: updated, seed: seed, palette: palette)
+    }
+
+    /// True when cropping to the front would lose more than about a third
+    /// of the image.
+    nonisolated static func prefersFitting(_ size: CGSize) -> Bool {
+        guard size.width > 0, size.height > 0 else { return false }
+        let aspect = size.width / size.height
+        let front = CoverDesign.frontAspectRatio
+        return max(aspect / front, front / aspect) > 1.5
     }
 
     func useEmbeddedCover() async {
