@@ -197,6 +197,39 @@ struct ImportSummaryTests {
         #expect(controller.summary == nil)
     }
 
+    @Test func progressSaysWhatItIsWaitingFor() {
+        #expect(ImportProgress(current: 3, total: 27, fileName: "v3.cbz", downloading: false).label == "Importing 3 of 27…")
+        #expect(ImportProgress(current: 3, total: 27, fileName: "v3.cbz", downloading: true).label == "Downloading 3 of 27 from iCloud…")
+        #expect(ImportProgress(current: 1, total: 1, fileName: "v1.cbz", downloading: true).label == "Downloading “v1.cbz” from iCloud…")
+        #expect(ImportProgress(current: 1, total: 1, fileName: "v1.cbz", downloading: false).label == "Importing…")
+        #expect(ImportProgress(current: 1, total: 4, fileName: "a", downloading: false).fractionDone == 0)
+        #expect(ImportProgress(current: 3, total: 4, fileName: "a", downloading: false).fractionDone == 0.5)
+    }
+
+    @Test func localFilesDontNeedDownloading() async throws {
+        let url = Fixtures.temporaryURL("local.txt")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: url)
+        #expect(!CloudFiles.needsDownload(url))
+        try await CloudFiles.download(url)
+    }
+
+    @Test func batchImportReportsProgressAndFinishes() async throws {
+        let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
+                                          booksFolder: Fixtures.temporaryURL("Books"))
+        let a = Fixtures.temporaryURL("a.cbr"), b = Fixtures.temporaryURL("b.cbr")
+        try FileManager.default.createDirectory(at: a.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: a)
+        try Data("x".utf8).write(to: b)
+        controller.importFiles([a, b])
+        #expect(controller.isImporting)
+        for _ in 0..<400 where controller.isImporting { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(!controller.isImporting)
+        #expect(controller.progress == nil)
+        #expect(controller.summary?.title == "Couldn’t import 2 files")
+    }
+
     @Test func aQuietSuccessIsNotCarriedIntoTheNextAlert() throws {
         let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
                                           booksFolder: Fixtures.temporaryURL("Books"))

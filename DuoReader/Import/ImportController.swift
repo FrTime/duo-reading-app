@@ -9,6 +9,8 @@ import UniformTypeIdentifiers
 @Observable
 final class ImportController {
     private(set) var isImporting = false
+    /// Which file of the batch is being worked on, for the progress overlay.
+    private(set) var progress: ImportProgress?
     var summary: ImportSummary?
 
     private let importer: LibraryImporter
@@ -30,7 +32,19 @@ final class ImportController {
         guard !urls.isEmpty else { return }
         isImporting = true
         Task {
-            let outcomes = await importer.importFiles(urls)
+            var outcomes: [ImportOutcome] = []
+            for (index, url) in urls.enumerated() {
+                let accessing = url.startAccessingSecurityScopedResource()
+                if CloudFiles.needsDownload(url) {
+                    progress = ImportProgress(current: index + 1, total: urls.count, fileName: url.lastPathComponent, downloading: true)
+                    // If it fails, the import below reports the file as unreadable.
+                    try? await CloudFiles.download(url)
+                }
+                if accessing { url.stopAccessingSecurityScopedResource() }
+                progress = ImportProgress(current: index + 1, total: urls.count, fileName: url.lastPathComponent, downloading: false)
+                outcomes.append(await importer.importFile(url))
+            }
+            progress = nil
             isImporting = false
             show(outcomes)
         }
@@ -66,6 +80,27 @@ final class ImportController {
             show(next)
         }
     }
+}
+
+/// Where a batch import has got to.
+struct ImportProgress: Equatable {
+    var current: Int
+    var total: Int
+    var fileName: String
+    /// Waiting for iCloud to download the file before it can be read.
+    var downloading: Bool
+
+    var label: String {
+        switch (downloading, total) {
+        case (true, 1): String(localized: "Downloading “\(fileName)” from iCloud…")
+        case (true, _): String(localized: "Downloading \(current) of \(total) from iCloud…")
+        case (false, 1): String(localized: "Importing…")
+        case (false, _): String(localized: "Importing \(current) of \(total)…")
+        }
+    }
+
+    /// Files finished so far, as a fraction of the batch.
+    var fractionDone: Double { Double(current - 1) / Double(max(total, 1)) }
 }
 
 /// A short, human summary of an import batch.
