@@ -11,6 +11,7 @@ struct CoverEditorView: View {
     @State private var model: CoverEditorModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var fold: CGRect?
     @State private var confirmingDiscard = false
     @State private var confirmingReset = false
 
@@ -22,26 +23,22 @@ struct CoverEditorView: View {
         NavigationStack {
             Group {
                 if sizeClass == .regular {
-                    GeometryReader { proxy in
-                        if let fold = ShelfView.verticalFold(in: proxy), fold.minX > 200, proxy.size.width - fold.maxX > 280 {
-                            // On the open Duo: the cover on the left screen,
-                            // tools on the right, nothing on the hinge.
-                            HStack(spacing: 0) {
-                                stageArea
-                                    .frame(width: fold.minX)
-                                Color(.separator)
-                                    .frame(width: fold.width)
-                                panelArea
-                                    .frame(maxWidth: .infinity)
-                            }
-                        } else {
-                            HStack(spacing: 0) {
-                                stageArea
-                                Divider()
-                                panelArea
-                            }
-                        }
+                    // On the open Duo the cover sits on the left screen and the
+                    // tools on the right, with nothing on the hinge. One
+                    // layout either way, so the stage keeps its identity
+                    // when the fold appears.
+                    HStack(spacing: 0) {
+                        stageArea
+                            .frame(width: fold?.minX)
+                            .frame(maxHeight: .infinity)
+                        Divider()
+                            .frame(width: fold?.width)
+                        panelArea
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .onGeometryChange(for: CGRect?.self) { proxy in
+                        Self.usableFold(in: proxy)
+                    } action: { fold = $0 }
                 } else {
                     VStack(spacing: 0) {
                         stageArea
@@ -155,7 +152,12 @@ struct CoverEditorView: View {
                 }
             }
         }
-        ToolbarItem(placement: .confirmationAction) {
+        ToolbarItemGroup(placement: .confirmationAction) {
+            Menu("More", systemImage: "ellipsis") {
+                Button("Use original cover", systemImage: "arrow.uturn.backward") {
+                    confirmingReset = true
+                }
+            }
             Button("Save") {
                 Task {
                     if await model.save() { dismiss() }
@@ -163,11 +165,15 @@ struct CoverEditorView: View {
             }
             .disabled(!model.isLoaded || model.isSaving)
         }
-        ToolbarItem(placement: .secondaryAction) {
-            Button("Use original cover", systemImage: "arrow.uturn.backward") {
-                confirmingReset = true
-            }
-        }
+    }
+
+    /// The hinge, when there's room for the stage on one side of it and
+    /// the tools on the other.
+    static func usableFold(in proxy: GeometryProxy) -> CGRect? {
+        guard let fold = ShelfView.verticalFold(in: proxy),
+              fold.minX > 200, proxy.size.width - fold.maxX > 280
+        else { return nil }
+        return fold
     }
 
     private var errorBinding: Binding<Bool> {
