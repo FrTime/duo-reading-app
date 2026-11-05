@@ -25,8 +25,15 @@ extension DuoReaderSchemaV1 {
         public var language: String?
         public var publisher: String?
         public var summary: String?
-        /// Subjects from the file's metadata, e.g. AO3 fandoms and tags.
-        public var subjects: [String]
+        /// Subjects from the file's metadata.
+        public var subjects: [String] = []
+        /// ISBNs, URNs and URLs from the file's metadata.
+        public var identifiers: [String] = []
+        /// Fandoms, ships, characters and tags for works from AO3.
+        public var ao3: AO3Metadata?
+        /// Cover image bytes from the file, kept outside the store so library
+        /// queries stay fast.
+        @Attribute(.externalStorage) public var coverImageData: Data?
 
         public var dateAdded: Date
         public var lastOpened: Date?
@@ -61,6 +68,22 @@ extension DuoReaderSchemaV1 {
             self.dateAdded = dateAdded
             self.progress = 0
             self.shelfOrder = shelfOrder
+        }
+
+        /// Fills in everything the file's metadata provides. The file name is
+        /// the title when the file has none.
+        public func apply(_ metadata: BookMetadata, fileURL: URL) {
+            title = metadata.title ?? BookMetadata.fallbackTitle(for: fileURL)
+            authors = metadata.authors
+            series = metadata.series
+            seriesIndex = metadata.seriesIndex
+            language = metadata.language
+            publisher = metadata.publisher
+            summary = metadata.summary
+            subjects = metadata.subjects
+            identifiers = metadata.identifiers
+            ao3 = metadata.ao3
+            coverImageData = metadata.coverImageData
         }
 
         /// Authors for display, e.g. "A, B and C", or "Unknown author" when there are none.
