@@ -153,9 +153,15 @@ struct ReaderView: View {
         ReaderSettingsView(
             settings: $model.settings,
             isReflowable: model.isReflowable,
+            pageScale: model.isFixedLayout ? pageScaleBinding : nil,
             outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs),
             onDone: onDone
         )
+    }
+
+    /// This book's page scale, remembered for the book.
+    private var pageScaleBinding: Binding<PageScale> {
+        Binding(get: { model.pageScale }, set: { model.setPageScale($0) })
     }
 
     private var outerCoverInputs: OuterCoverPolicy.Inputs {
@@ -246,6 +252,11 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready)
         }
+        if model.isFixedLayout {
+            ToolbarItem(placement: .topBarTrailing) {
+                pageScaleMenu
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 panel = .contents
@@ -263,6 +274,31 @@ struct ReaderView: View {
             }
             .disabled(model.state != .ready || !model.isSearchable)
         }
+    }
+}
+
+extension ReaderView {
+    /// Page size for comics, one tap from the page: fit, fill, stretch and
+    /// so on, remembered for the book.
+    fileprivate var pageScaleMenu: some View {
+        Menu {
+            Picker("Page Size", selection: pageScaleBinding) {
+                ForEach(PageScale.allCases) { scale in
+                    Label(scale.name, systemImage: scale.systemImage).tag(scale)
+                }
+            }
+            .pickerStyle(.inline)
+            Section {
+                Button("Use for All Comics", systemImage: "rectangle.stack") {
+                    model.makePageScaleDefault()
+                }
+                .disabled(!model.pageScaleDiffersFromDefault)
+            }
+        } label: {
+            Label("Page Size", systemImage: "aspectratio")
+        }
+        .accessibilityValue(Text(model.pageScale.name))
+        .disabled(model.state != .ready)
     }
 }
 
@@ -345,7 +381,8 @@ private struct ReaderSurface: View {
                 let measured = Self.sideInsets(safe: safe.frame(in: .global), full: full.frame(in: .global))
                 let kept = railInsets?.size == full.size ? railInsets?.insets : nil
                 let insets = Self.widest(measured, kept)
-                surface(in: full, insets: insets)
+                // Comics run edge to edge, under the rail too; text keeps clear.
+                surface(in: full, insets: model.isFixedLayout ? .zero : insets)
                     .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
                         railInsets = new
                     }

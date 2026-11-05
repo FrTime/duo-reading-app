@@ -42,3 +42,19 @@ public struct PageInsets: Equatable, Sendable {
         )
     }
 }
+
+/// Space kept clear around fixed-layout pages, with equal left and right.
+public struct FixedLayoutInsets: Equatable, Sendable {
+    public var top: CGFloat
+    /// Both the left and the right.
+    public var side: CGFloat
+    public var bottom: CGFloat
+
+    public init(top: CGFloat, side: CGFloat, bottom: CGFloat) {
+        self.top = top
+        self.side = side
+        self.bottom = bottom
+    }
+
+    public static let zero = FixedLayoutInsets(top: 0, side: 0, bottom: 0)
+}

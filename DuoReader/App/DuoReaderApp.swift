@@ -34,6 +34,10 @@ struct DuoReaderApp: App {
         LibraryActions.onDelete.append { id in
             Task { await CoverLibrary.shared.deleteCovers(for: id) }
         }
+        // So is each comic's page scale.
+        LibraryActions.onDelete.append { id in
+            PageScaleStore().setScale(nil, for: id)
+        }
     }
 
     var body: some Scene {
