@@ -114,6 +114,9 @@ private struct RootView: View {
             // `-DuoReaderOpenBook <title>` the first whose title contains
             // <title>, so the reader can be screenshotted on a shared
             // simulator without tapping through the library.
+            // `-DuoReaderAppearance dark|light` forces the appearance, for
+            // simulators where `simctl ui appearance` doesn't reach the app.
+            .preferredColorScheme(Self.debugColorScheme)
             .task {
                 let arguments = ProcessInfo.processInfo.arguments
                 if let index = arguments.firstIndex(of: "-DuoReaderOpenBook"), arguments.indices.contains(index + 1) {
@@ -126,6 +129,22 @@ private struct RootView: View {
             #endif
     }
 }
+
+#if DEBUG
+extension RootView {
+    static var debugColorScheme: ColorScheme? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-DuoReaderAppearance"), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        switch arguments[index + 1] {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+    }
+}
+#endif
 
 /// Asks for a little background time, and gives it back exactly once.
 @MainActor

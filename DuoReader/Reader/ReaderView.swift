@@ -12,12 +12,11 @@ struct ReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showingSettings = false
+    /// The open side panel: settings, contents or search. One at a time.
+    @State private var panel: ReaderPanel?
     @AppStorage(OuterCoverSettingsSection.storageKey) private var showsCoverOnOutside = false
     @State private var hinge: OuterCoverPolicy.Hinge = .none
     @State private var outerCoverCamera = OuterCoverCamera.shared
-    @State private var showingContents = false
-    @State private var showingSearch = false
 
     init(book: Book, booksFolder: URL = LibraryImporter.defaultBooksFolder) {
         _model = State(initialValue: ReaderModel(book: book, booksFolder: booksFolder))
@@ -36,6 +35,16 @@ struct ReaderView: View {
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity)
                             .background(pageColor)
+                            // The bar covers the page's last lines (keeping
+                            // them clear would cost lines on every page), so
+                            // fade them out rather than slicing one in half.
+                            .background(alignment: .top) {
+                                LinearGradient(colors: [pageColor.opacity(0), pageColor], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: 24)
+                                    .offset(y: -24)
+                                    .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
+                            }
                             .transition(.opacity)
                     }
                 }
@@ -47,37 +56,49 @@ struct ReaderView: View {
                 // Bars take the page colour so a theme doesn't show a band
                 // of system material behind the title.
                 .toolbarBackground(pageColor, for: .navigationBar)
+                // Always drawn, not only once content scrolls under it, so a
+                // line never shows faded through the bar's material.
+                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
                 .background(pageColor.ignoresSafeArea())
         }
-        .sheet(isPresented: $showingContents) {
-            ReaderContentsView(model: model)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showingSearch) {
-            ReaderSearchView(model: model)
-                .presentationDetents([.large])
-        }
-        // On a wide screen (an open Duo) settings dock at the side so the page
-        // stays visible and live; at compact width the inspector shows as a
-        // sheet. One presenter, so folding or unfolding with settings open
-        // doesn't close them. It sits outside the reader's navigation stack:
-        // inside it, the settings' own title and Done button took over the
-        // reader's bar.
-        .inspector(isPresented: $showingSettings) {
-            ReaderSettingsView(
-                settings: $model.settings,
-                isReflowable: model.isReflowable,
-                outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs)
-            )
-                .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
-                .presentationDetents([.medium, .large])
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        // On the open Duo panels dock on the right-hand screen, drawn by the
+        // reader itself (see ReaderSurface) so they meet the crease exactly;
+        // the system inspector lands at widths that vary by pose. At compact
+        // width they show as sheets. They sit outside the reader's
+        // navigation stack: inside it, a panel's own title and Done button
+        // took over the reader's bar.
+        .sheet(item: Binding(
+            get: { model.settingsSpineX == nil ? panel : nil },
+            set: { if $0 == nil { panel = nil } }
+        )) { panel in
+            switch panel {
+            case .settings:
+                settingsView(onDone: nil)
+                    .presentationDetents([.medium, .large])
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            case .contents:
+                ReaderContentsView(model: model)
+                    .presentationDetents([.medium, .large])
+            case .search:
+                ReaderSearchView(model: model)
+                    .presentationDetents([.large])
+            }
         }
         .statusBarHidden(!model.isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: model.isChromeVisible)
         .task {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
+            #if DEBUG
+            // `-DuoReaderShowPanel settings|contents|search` opens that panel
+            // once the book is open, for screenshots on simulators where taps
+            // don't get through.
+            let arguments = ProcessInfo.processInfo.arguments
+            if model.state == .ready, let index = arguments.firstIndex(of: "-DuoReaderShowPanel"),
+               arguments.indices.contains(index + 1) {
+                panel = ReaderPanel(rawValue: arguments[index + 1])
+            }
+            #endif
         }
         .onChange(of: colorScheme) { _, scheme in
             model.systemIsDark = scheme == .dark
@@ -114,6 +135,26 @@ struct ReaderView: View {
         }
     }
 
+    /// A panel docked beside the page, with Done closing it.
+    private func dockedPanel(_ panel: ReaderPanel) -> AnyView {
+        let close = { self.panel = nil }
+        switch panel {
+        // Identity per panel, so switching panels starts the new one fresh.
+        case .settings: return AnyView(settingsView(onDone: close).id(panel))
+        case .contents: return AnyView(ReaderContentsView(model: model, onDone: close).id(panel))
+        case .search: return AnyView(ReaderSearchView(model: model, onDone: close).id(panel))
+        }
+    }
+
+    private func settingsView(onDone: (() -> Void)?) -> ReaderSettingsView {
+        ReaderSettingsView(
+            settings: $model.settings,
+            isReflowable: model.isReflowable,
+            outerCoverStatus: OuterCoverPolicy.status(outerCoverInputs),
+            onDone: onDone
+        )
+    }
+
     private var outerCoverInputs: OuterCoverPolicy.Inputs {
         OuterCoverPolicy.Inputs(
             isEnabled: showsCoverOnOutside,
@@ -133,13 +174,20 @@ struct ReaderView: View {
     }
 
     private var chromeVisibility: Visibility {
-        model.isChromeVisible || model.state != .ready ? .visible : .hidden
+        barsShown || model.state != .ready ? .visible : .hidden
+    }
+
+    /// The bars hide while a panel is open: on the open Duo their buttons
+    /// sit in the side rail, where they'd read as part of the panel, and
+    /// panels have their own Done button.
+    private var barsShown: Bool {
+        model.isChromeVisible && panel == nil
     }
 
     /// The scrubber shows with the bars, unless the pose gives the
     /// controls a panel of their own.
     private var showsScrubber: Bool {
-        model.isChromeVisible && model.state == .ready && model.layout?.controlsFrame == nil
+        barsShown && model.state == .ready && model.layout?.controlsFrame == nil
     }
 
     @ViewBuilder
@@ -148,6 +196,11 @@ struct ReaderView: View {
         case .loading:
             ProgressView("Opening \(model.book.title)…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The bar shows while the book opens, so where it ends is
+                // known before the first page is laid out (see PageInsets).
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                    model.titleBarBottom = $0
+                }
                 .foregroundStyle(Color(uiColor: model.palette.text.uiColor))
         case .failed(let error):
             ContentUnavailableView {
@@ -159,7 +212,12 @@ struct ReaderView: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            ReaderSurface(model: model) { showingSettings = true }
+            ReaderSurface(
+                model: model,
+                barsShown: barsShown,
+                docked: panel.map(dockedPanel),
+                showSettings: { panel = .settings }
+            )
                 // VoiceOver reads the book as one scrolling chapter (Readium
                 // switches to scroll mode for it), so these move by chapter.
                 .accessibilityAction(named: Text("Next Chapter")) {
@@ -185,7 +243,7 @@ struct ReaderView: View {
         }
         ToolbarItem(placement: .primaryAction) {
             Button {
-                showingSettings = true
+                panel = .settings
             } label: {
                 Label("Reading Settings", systemImage: "textformat.size")
             }
@@ -193,9 +251,7 @@ struct ReaderView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                // One panel at a time: settings may be open as a sheet.
-                showingSettings = false
-                showingContents = true
+                panel = .contents
             } label: {
                 Label("Contents", systemImage: "list.bullet")
             }
@@ -204,8 +260,7 @@ struct ReaderView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 model.highlightSearchResult(nil)
-                showingSettings = false
-                showingSearch = true
+                panel = .search
             } label: {
                 Label("Search", systemImage: "magnifyingglass")
             }
@@ -258,6 +313,9 @@ enum ReaderProgressText {
 /// fold's division region.
 private struct ReaderSurface: View {
     let model: ReaderModel
+    let barsShown: Bool
+    /// The open panel, docked on the right-hand screen when it's wide enough.
+    let docked: AnyView?
     let showSettings: () -> Void
     /// The side space to keep clear, as the difference between the safe frame
     /// and the edge-to-edge frame. (A view that ignores the safe area reports
@@ -291,9 +349,38 @@ private struct ReaderSurface: View {
                     .onChange(of: RailInsets(size: full.size, insets: insets), initial: true) { _, new in
                         railInsets = new
                     }
+                    // Pages start below the title bar. Measured only while it
+                    // shows, so hiding it doesn't reflow the page.
+                    .onChange(of: safe.frame(in: .global).minY, initial: true) { _, barBottom in
+                        if barsShown { model.titleBarBottom = barBottom }
+                    }
+                    .onChange(of: settingsSpine(in: full), initial: true) { _, spine in
+                        model.settingsSpineX = spine
+                    }
             }
             .ignoresSafeArea(.container)
+            // A docked panel, from the spine to the right edge. Laid out in
+            // the safe area so its header clears the status bar and the rail.
+            .overlay(alignment: .topTrailing) {
+                if let docked, let spine = model.settingsSpineX {
+                    let frame = safe.frame(in: .global)
+                    docked
+                        .frame(width: max(0, frame.maxX - spine))
+                        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: docked == nil)
         }
+    }
+
+    /// Docked settings fill everything right of the spine (the fold, or the
+    /// middle of a flat screen) when the screen is wide enough for two
+    /// pages; otherwise they show as a sheet. `proxy` is edge
+    /// to edge, so its coordinates are the window's.
+    private func settingsSpine(in proxy: GeometryProxy) -> CGFloat? {
+        guard proxy.size.width >= ReaderLayout.automaticSpreadMinWidth else { return nil }
+        return proxy.reservedRegions(kind: .division).first?.frame.midX ?? proxy.size.width / 2
     }
 
     static func widest(_ a: ReaderLayout.SideInsets, _ b: ReaderLayout.SideInsets?) -> ReaderLayout.SideInsets {

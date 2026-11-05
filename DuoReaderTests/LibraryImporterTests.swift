@@ -151,6 +151,59 @@ struct ImportSummaryTests {
         #expect(s.message.contains("B"))
         #expect(s.message.contains("x.mobi"))
     }
+
+    @Test func failureTitlesSayWhatWentWrong() {
+        let one = ImportSummary(outcomes: [.failed(fileName: "empty.epub", reason: .unreadable)])
+        #expect(one.title == "Couldn’t import “empty.epub”")
+        #expect(one.message == ImportFailure.unreadable.explanation)
+
+        let two = ImportSummary(outcomes: [
+            .failed(fileName: "a.epub", reason: .unreadable),
+            .failed(fileName: "b.zip", reason: .unsupportedFormat),
+        ])
+        #expect(two.title == "Couldn’t import 2 files")
+        #expect(two.message.contains("a.epub") && two.message.contains("b.zip"))
+
+        let mixed = ImportSummary(outcomes: [
+            .imported(PersistentIdentifierStub.make(), title: "A"),
+            .failed(fileName: "b.zip", reason: .unsupportedFormat),
+        ])
+        #expect(mixed.title == "1 file couldn’t be imported")
+        #expect(mixed.message.contains("Added: 1"))
+    }
+
+    @Test func aResultArrivingWhileAnAlertIsUpIsShownAfterItCloses() async throws {
+        let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
+                                          booksFolder: Fixtures.temporaryURL("Books"))
+        controller.representDelay = .milliseconds(1)
+        controller.show([.failed(fileName: "empty.epub", reason: .unreadable)])
+        controller.show([.failed(fileName: "fake.epub", reason: .unreadable)])
+        controller.show([.failed(fileName: "notes.zip", reason: .unsupportedFormat)])
+        // The alert on screen isn't changed under the user.
+        #expect(controller.summary?.title == "Couldn’t import “empty.epub”")
+        #expect(controller.queued.count == 2)
+
+        controller.dismissSummary()
+        #expect(controller.summary == nil)
+        for _ in 0..<200 where controller.summary == nil { try await Task.sleep(for: .milliseconds(5)) }
+        let next = try #require(controller.summary)
+        #expect(next.title == "Couldn’t import 2 files")
+        #expect(next.message.contains("fake.epub") && next.message.contains("notes.zip"))
+        #expect(controller.queued.isEmpty)
+
+        // Dismissing with nothing queued just closes it.
+        controller.dismissSummary()
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(controller.summary == nil)
+    }
+
+    @Test func aQuietSuccessIsNotCarriedIntoTheNextAlert() throws {
+        let controller = ImportController(container: try LibraryStore.makeContainer(inMemory: true),
+                                          booksFolder: Fixtures.temporaryURL("Books"))
+        controller.show([.imported(PersistentIdentifierStub.make(), title: "A")])
+        controller.show([.failed(fileName: "notes.zip", reason: .unsupportedFormat)])
+        #expect(controller.summary?.imported.isEmpty == true)
+    }
 }
 
 /// A real PersistentIdentifier for summary tests, from a throwaway store.

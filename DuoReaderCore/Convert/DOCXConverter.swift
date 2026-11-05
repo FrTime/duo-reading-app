@@ -30,7 +30,8 @@ public struct DOCXConverter: BookConverter {
         let parsed = Self.blocks(fromDocument: body, styleNames: styles)
         let levels = parsed.blocks.compactMap { if case .heading(let level, _) = $0 { level } else { nil } }
         var document = EPUBDocument(
-            title: core["title"] ?? parsed.title ?? BookConverters.title(for: url),
+            title: core["title"] ?? parsed.title ?? Self.leadingHeading(parsed.blocks) ?? parsed.styledTitle
+                ?? BookConverters.title(for: url),
             authors: (core["creator"] ?? "").split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
             chapters: TextBlock.chapters(from: parsed.blocks, splitLevel: levels.min())
         )
@@ -38,6 +39,12 @@ public struct DOCXConverter: BookConverter {
         let plain = parsed.blocks.prefix(40).compactMap { if case .paragraph(let inline) = $0 { inline } else { nil } }.joined(separator: " ")
         if let language = core["language"] ?? BookConverters.detectLanguage(plain) { document.language = language }
         return document
+    }
+
+    /// A document that opens with a heading is usually titled by it, when
+    /// neither the properties nor a Title paragraph name it.
+    static func leadingHeading(_ blocks: [TextBlock]) -> String? {
+        if case .heading(_, let text)? = blocks.first { text } else { nil }
     }
 
     // MARK: - Styles and properties
@@ -74,6 +81,9 @@ public struct DOCXConverter: BookConverter {
     struct Parsed {
         var title: String?
         var blocks: [TextBlock]
+        /// A short first paragraph set in bold or large type, which is how
+        /// documents without styles (Pages, TextEdit, textutil) mark a title.
+        var styledTitle: String?
     }
 
     static func blocks(fromDocument data: Data, styleNames: [String: String]) -> Parsed {
@@ -82,12 +92,13 @@ public struct DOCXConverter: BookConverter {
         parser.delegate = reader
         parser.shouldResolveExternalEntities = false
         parser.parse()
-        return Parsed(title: reader.title, blocks: reader.blocks)
+        return Parsed(title: reader.title, blocks: reader.blocks, styledTitle: reader.styledTitle)
     }
 
     private final class BodyReader: NSObject, XMLParserDelegate {
         let styleNames: [String: String]
         var title: String?
+        var styledTitle: String?
         var blocks: [TextBlock] = []
 
         private var styleName = ""
@@ -95,6 +106,10 @@ public struct DOCXConverter: BookConverter {
         private var paragraphText = ""
         private var runText = ""
         private var bold = false, italic = false, underline = false, strike = false
+        /// Font size in half-points (`w:sz`), 0 when the run doesn't set one.
+        private var runSize = 0
+        private var paragraphAllBold = true
+        private var paragraphMaxSize = 0
         private var inText = false
         private var inRunProperties = false
         /// Text boxes nest whole paragraphs inside a run; only the outermost
@@ -121,18 +136,22 @@ public struct DOCXConverter: BookConverter {
                     styleName = ""
                     paragraphXHTML = ""
                     paragraphText = ""
+                    paragraphAllBold = true
+                    paragraphMaxSize = 0
                 }
             case "w:pStyle" where paragraphDepth == 1:
                 let id = attributes["w:val"] ?? ""
                 styleName = styleNames[id] ?? id.lowercased()
             case "w:r":
                 bold = false; italic = false; underline = false; strike = false
+                runSize = 0
                 runText = ""
             case "w:rPr": inRunProperties = true
             case "w:b" where inRunProperties: bold = isOn(attributes)
             case "w:i" where inRunProperties: italic = isOn(attributes)
             case "w:u" where inRunProperties: underline = isOn(attributes)
             case "w:strike" where inRunProperties: strike = isOn(attributes)
+            case "w:sz" where inRunProperties: runSize = Int(attributes["w:val"] ?? "") ?? 0
             case "w:t": inText = true
             case "w:tab": runText += " "
             case "w:br" where attributes["w:type"] == nil || attributes["w:type"] == "textWrapping":
@@ -179,6 +198,10 @@ public struct DOCXConverter: BookConverter {
             if strike { html = "<del>\(html)</del>" }
             paragraphXHTML += html
             paragraphText += runText
+            if !runText.trimmingCharacters(in: .whitespaces).isEmpty {
+                paragraphAllBold = paragraphAllBold && bold
+                paragraphMaxSize = max(paragraphMaxSize, runSize)
+            }
             runText = ""
         }
 
@@ -193,6 +216,11 @@ public struct DOCXConverter: BookConverter {
             case nil where ProseHeuristics.isSceneBreak(plain):
                 blocks.append(.sceneBreak)
             case nil:
+                // 16 pt and up, or all bold, on a short single line at the very top.
+                if blocks.isEmpty, title == nil, styledTitle == nil, plain.count <= 120, !plain.contains("\n"),
+                   paragraphAllBold || paragraphMaxSize >= 32 {
+                    styledTitle = plain
+                }
                 blocks.append(.paragraph(inline: paragraphXHTML.trimmingCharacters(in: .whitespaces)))
             }
         }

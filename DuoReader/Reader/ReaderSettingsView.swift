@@ -11,39 +11,33 @@ struct ReaderSettingsView: View {
     var isReflowable = true
     /// Whether to offer the outer-screen cover, and what to say about it.
     var outerCoverStatus: OuterCoverPolicy.Status = .unsupported
-    @Environment(\.dismiss) private var dismiss
+    /// Closes settings when they're docked in the reader rather than presented.
+    var onDone: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationStack {
-            Form {
-                themeSection
-                if isReflowable {
-                    textSection
-                }
-                layoutSection
-                if isReflowable {
-                    spacingSection
-                }
-                pageTurningSection
-                OuterCoverSettingsSection(status: outerCoverStatus, camera: .shared)
-                Section {
-                    Button("Reset to Defaults", role: .destructive) {
-                        settings = .default
-                    }
-                    .disabled(settings == .default)
-                }
+        ReaderPanelContainer(title: "Reading Settings", onDone: onDone) {
+            form
+        }
+    }
+
+    private var form: some View {
+        Form {
+            themeSection
+            if isReflowable {
+                textSection
             }
-            .navigationTitle("Reading Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Done", systemImage: "checkmark")
-                    }
+            layoutSection
+            if isReflowable {
+                spacingSection
+            }
+            pageTurningSection
+            OuterCoverSettingsSection(status: outerCoverStatus, camera: .shared)
+            Section {
+                Button("Reset to Defaults", role: .destructive) {
+                    settings = .default
                 }
+                .disabled(settings == .default)
             }
         }
     }
