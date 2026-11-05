@@ -91,6 +91,13 @@ struct ReaderView: View {
         .task {
             model.systemIsDark = colorScheme == .dark
             await model.load(in: modelContext)
+            #if DEBUG
+            // `-DuoReaderShowSettings` opens settings once the book is open,
+            // for screenshots on simulators where taps don't get through.
+            if ProcessInfo.processInfo.arguments.contains("-DuoReaderShowSettings"), model.state == .ready {
+                showingSettings = true
+            }
+            #endif
         }
         .onChange(of: colorScheme) { _, scheme in
             model.systemIsDark = scheme == .dark
