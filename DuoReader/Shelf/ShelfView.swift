@@ -11,6 +11,7 @@ import SwiftUI
 struct ShelfView: View {
     var onOpen: (Book) -> Void
     var onEditCover: ((Book) -> Void)?
+    var onEditDetails: ((Book) -> Void)?
     var onDelete: ((Book) -> Void)?
     var covers: CoverLibrary = .shared
 
@@ -117,6 +118,7 @@ struct ShelfView: View {
                     book: book,
                     onRead: { open(book) },
                     onEditCover: onEditCover.map { edit in { edit(book) } },
+                    onEditDetails: onEditDetails.map { edit in { edit(book) } },
                     onDelete: onDelete.map { delete in { select(nil); delete(book) } },
                     onClose: { select(nil) }
                 )
@@ -464,6 +466,7 @@ struct ShelfBookCard: View {
     let book: Book
     var onRead: () -> Void
     var onEditCover: (() -> Void)?
+    var onEditDetails: (() -> Void)?
     var onDelete: (() -> Void)?
     var onClose: () -> Void
 
@@ -491,9 +494,14 @@ struct ShelfBookCard: View {
                     }
                 }
                 Spacer(minLength: 0)
-                if let onDelete {
+                if onDelete != nil || onEditDetails != nil {
                     Menu {
-                        Button("Delete…", systemImage: "trash", role: .destructive, action: onDelete)
+                        if let onEditDetails {
+                            Button("Edit Details…", systemImage: "pencil", action: onEditDetails)
+                        }
+                        if let onDelete {
+                            Button("Delete…", systemImage: "trash", role: .destructive, action: onDelete)
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .font(.title2)

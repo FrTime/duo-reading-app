@@ -22,6 +22,8 @@ struct LibraryView: View {
     @State private var bookPendingDelete: Book?
     @State private var deleteError: String?
     @State private var editingBook: Book?
+    @State private var detailsBook: Book?
+    @State private var showingTitleCleanup = false
 
     /// Called when a book is tapped. The reader (#17) plugs in here.
     var onOpen: (Book) -> Void = { _ in }
@@ -90,6 +92,12 @@ struct LibraryView: View {
         .fullScreenCover(item: $editingBook) { book in
             CoverEditorView(book: book)
         }
+        .sheet(item: $detailsBook) { book in
+            BookDetailsView(book: book)
+        }
+        .sheet(isPresented: $showingTitleCleanup) {
+            TitleCleanupView()
+        }
         .alert("Couldn't delete the book", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("OK") { deleteError = nil }
         } message: {
@@ -115,7 +123,12 @@ struct LibraryView: View {
         } else {
             switch layout {
             case .shelf where searchText.isEmpty:
-                ShelfView(onOpen: open, onEditCover: { editingBook = $0 }, onDelete: { bookPendingDelete = $0 })
+                ShelfView(
+                    onOpen: open,
+                    onEditCover: { editingBook = $0 },
+                    onEditDetails: { detailsBook = $0 },
+                    onDelete: { bookPendingDelete = $0 }
+                )
                     .ignoresSafeArea(edges: .bottom)
                     // Light title and buttons over the dark wood.
                     .toolbarColorScheme(.dark, for: .navigationBar)
@@ -158,6 +171,7 @@ struct LibraryView: View {
     private func bookMenu(for book: Book) -> some View {
         Button("Open", systemImage: "book") { open(book) }
         Button("Edit Cover", systemImage: "paintbrush") { editingBook = book }
+        Button("Edit Details…", systemImage: "pencil") { detailsBook = book }
         Divider()
         Button("Delete…", systemImage: "trash", role: .destructive) { bookPendingDelete = book }
     }
@@ -185,6 +199,9 @@ struct LibraryView: View {
                     Label("Shelf", systemImage: "books.vertical").tag(LibraryLayout.shelf)
                     Label("Grid", systemImage: "square.grid.2x2").tag(LibraryLayout.grid)
                     Label("List", systemImage: "list.bullet").tag(LibraryLayout.list)
+                }
+                Section {
+                    Button("Clean Up Titles…", systemImage: "wand.and.stars") { showingTitleCleanup = true }
                 }
             } label: {
                 Label("Sort and View", systemImage: "arrow.up.arrow.down")
