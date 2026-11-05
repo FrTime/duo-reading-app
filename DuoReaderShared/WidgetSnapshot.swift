@@ -138,17 +138,11 @@ struct WidgetStore: Sendable {
         try data.write(to: snapshotURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
+    // Dates keep their full precision (the default strategy) so a saved
+    // snapshot compares equal to the one it came from. ISO 8601 drops
+    // fractional seconds, which made every write look like a change.
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
 }
 
 /// Links from a widget back into the app.
