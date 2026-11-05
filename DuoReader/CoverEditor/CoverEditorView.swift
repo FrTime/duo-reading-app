@@ -11,7 +11,6 @@ struct CoverEditorView: View {
     @State private var model: CoverEditorModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var fold: CGRect?
     @State private var confirmingDiscard = false
     @State private var confirmingReset = false
 
@@ -27,18 +26,17 @@ struct CoverEditorView: View {
                     // tools on the right, with nothing on the hinge. One
                     // layout either way, so the stage keeps its identity
                     // when the fold appears.
-                    HStack(spacing: 0) {
-                        stageArea
-                            .frame(width: fold?.minX)
-                            .frame(maxHeight: .infinity)
-                        Divider()
-                            .frame(width: fold?.width)
-                        panelArea
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    GeometryReader { proxy in
+                        let fold = Self.usableFold(in: proxy)
+                        HStack(spacing: 0) {
+                            stageArea
+                                .frame(width: fold?.minX ?? proxy.size.width * 0.55)
+                            Divider()
+                                .frame(width: fold?.width ?? 1)
+                            panelArea
+                        }
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                     }
-                    .onGeometryChange(for: CGRect?.self) { proxy in
-                        Self.usableFold(in: proxy)
-                    } action: { fold = $0 }
                 } else {
                     VStack(spacing: 0) {
                         stageArea
@@ -152,12 +150,16 @@ struct CoverEditorView: View {
                 }
             }
         }
-        ToolbarItemGroup(placement: .confirmationAction) {
+        // On the leading side: the trailing edge of the open Duo is the
+        // system's status column, where extra items get pushed.
+        ToolbarItem(placement: .topBarLeading) {
             Menu("More", systemImage: "ellipsis") {
                 Button("Use original cover", systemImage: "arrow.uturn.backward") {
                     confirmingReset = true
                 }
             }
+        }
+        ToolbarItem(placement: .confirmationAction) {
             Button("Save") {
                 Task {
                     if await model.save() { dismiss() }
