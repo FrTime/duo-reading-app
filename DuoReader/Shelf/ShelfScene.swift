@@ -27,7 +27,7 @@ final class ShelfScene {
     private var targets: [UUID: Transform] = [:]
     private var textureTasks: [UUID: Task<Void, Never>] = [:]
     private var caseKey: CaseKey?
-    private var caseMaterials: (board: UnlitMaterial, back: UnlitMaterial, wall: UnlitMaterial)?
+    private var caseMaterials: (board: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: PhysicallyBasedMaterial)?
 
     private struct CaseKey: Equatable {
         var rows: Int
@@ -42,6 +42,32 @@ final class ShelfScene {
         camera.camera.far = 50
         root.addChild(camera)
         root.addChild(caseRoot)
+        addLights()
+    }
+
+    /// A warm key light from the upper left that casts shadows (books onto
+    /// the boards and the back of the case), and a soft cool fill from the
+    /// right. Both ride on the camera, so every shelf is lit the same way as
+    /// you scroll.
+    private func addLights() {
+        let key = DirectionalLight()
+        key.light.color = UIColor(red: 1, green: 0.95, blue: 0.86, alpha: 1)
+        key.light.intensity = 2600
+        key.shadow = DirectionalLightComponent.Shadow(maximumDistance: 3, depthBias: 1.5)
+        camera.addChild(key)
+        key.look(at: SIMD3(0, 0, -1.2), from: SIMD3(-0.7, 0.9, 0.2), relativeTo: camera)
+
+        let fill = DirectionalLight()
+        fill.light.color = UIColor(red: 0.85, green: 0.9, blue: 1, alpha: 1)
+        fill.light.intensity = 900
+        camera.addChild(fill)
+        fill.look(at: SIMD3(0, 0, -1.2), from: SIMD3(0.8, -0.2, 0.4), relativeTo: camera)
+
+        let front = DirectionalLight()
+        front.light.color = .white
+        front.light.intensity = 700
+        camera.addChild(front)
+        front.look(at: SIMD3(0, 0, -1.2), from: SIMD3(0, 0.1, 0.5), relativeTo: camera)
     }
 
     // MARK: - Camera
@@ -196,13 +222,13 @@ final class ShelfScene {
 
     /// Material order for a split box: front, top, back, bottom, right, left.
     /// The front is the cover (+z), the left (-x) is the spine.
-    private static func materials(front: UnlitMaterial, spine: UnlitMaterial, back: UnlitMaterial) -> [any RealityKit.Material] {
-        let pages = UnlitMaterial(color: UIColor(cgColor: RGBAColor.cream.cgColor))
+    static func materials(front: PhysicallyBasedMaterial, spine: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial) -> [any RealityKit.Material] {
+        let pages = ShelfTextures.solid(.cream, roughness: 0.9)
         return [front, pages, back, pages, pages, spine]
     }
 
     private static func placeholderMaterials() -> [any RealityKit.Material] {
-        let cover = UnlitMaterial(color: UIColor(cgColor: RGBAColor(red: 0.4, green: 0.37, blue: 0.33).cgColor))
+        let cover = ShelfTextures.solid(RGBAColor(red: 0.4, green: 0.37, blue: 0.33))
         return materials(front: cover, spine: cover, back: cover)
     }
 
@@ -233,9 +259,9 @@ final class ShelfScene {
         caseKey = key
 
         if caseMaterials == nil {
-            let board = await ShelfTextures.material(from: ShelfTextures.boardImage(), fallback: ShelfTextures.wood)
-            let back = await ShelfTextures.material(from: ShelfTextures.backPanelImage(), fallback: ShelfTextures.wall)
-            let wall = UnlitMaterial(color: UIColor(cgColor: ShelfTextures.wall.darkened(0.45).cgColor))
+            let board = await ShelfTextures.material(from: ShelfTextures.boardImage(), fallback: ShelfTextures.wood, roughness: 0.45)
+            let back = await ShelfTextures.material(from: ShelfTextures.backPanelImage(), fallback: ShelfTextures.wall, roughness: 0.7)
+            let wall = ShelfTextures.solid(ShelfTextures.wall.darkened(0.45), roughness: 0.9)
             caseMaterials = (board, back, wall)
         }
         guard let materials = caseMaterials, caseKey == key else { return }

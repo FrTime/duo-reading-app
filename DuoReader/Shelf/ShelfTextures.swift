@@ -19,10 +19,8 @@ enum ShelfTextures {
                 context.setFillColor(wood.darkened(0.5).cgColor.copy(alpha: alpha) ?? wood.cgColor)
                 context.fill(CGRect(x: 0, y: y, width: size.width, height: CGFloat.random(in: 1...3, using: &generator)))
             }
-            context.setFillColor(UIColor.white.withAlphaComponent(0.18).cgColor)
-            context.fill(CGRect(x: 0, y: 0, width: size.width, height: 4))
-            context.setFillColor(UIColor.black.withAlphaComponent(0.2).cgColor)
-            context.fill(CGRect(x: 0, y: size.height - 6, width: size.width, height: 6))
+            context.setFillColor(UIColor.white.withAlphaComponent(0.1).cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: size.width, height: 3))
         }
     }
 
@@ -33,10 +31,10 @@ enum ShelfTextures {
             context.fill(CGRect(origin: .zero, size: size))
             guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { return }
             let colors = [
-                UIColor.black.withAlphaComponent(0.55).cgColor,
-                UIColor.black.withAlphaComponent(0.15).cgColor,
+                UIColor.black.withAlphaComponent(0.3).cgColor,
+                UIColor.black.withAlphaComponent(0.08).cgColor,
                 UIColor.black.withAlphaComponent(0.0).cgColor,
-                UIColor.black.withAlphaComponent(0.2).cgColor,
+                UIColor.black.withAlphaComponent(0.1).cgColor,
             ] as CFArray
             if let gradient = CGGradient(colorsSpace: space, colors: colors, locations: [0, 0.25, 0.7, 1]) {
                 context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: size.height), options: [])
@@ -51,12 +49,22 @@ enum ShelfTextures {
         return UIGraphicsImageRenderer(size: size, format: format).image { body($0.cgContext, size) }.cgImage
     }
 
+    /// A lit material: the image as its colour, with a satin finish so the
+    /// key light picks out edges and the books cast real shadows.
     @MainActor
-    static func material(from image: CGImage?, fallback: RGBAColor) async -> UnlitMaterial {
-        var material = UnlitMaterial(color: UIColor(cgColor: fallback.cgColor))
+    static func material(from image: CGImage?, fallback: RGBAColor, roughness: Float = 0.6) async -> PhysicallyBasedMaterial {
+        var material = solid(fallback, roughness: roughness)
         if let image, let texture = try? await TextureResource(image: image, options: .init(semantic: .color)) {
-            material.color = .init(tint: .white, texture: .init(texture))
+            material.baseColor = .init(tint: .white, texture: .init(texture))
         }
+        return material
+    }
+
+    static func solid(_ color: RGBAColor, roughness: Float = 0.6) -> PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: UIColor(cgColor: color.cgColor))
+        material.roughness = .init(floatLiteral: roughness)
+        material.metallic = .init(floatLiteral: 0)
         return material
     }
 }
