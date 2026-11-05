@@ -5,7 +5,7 @@ import SwiftUI
 /// The main library view: every book standing on a 3D bookcase.
 ///
 /// Tap a book to pull it out and see its cover, tap again (or Read) to open
-/// it. Long-press to pick a book up and drag it to a new place; the order is
+/// it. Drag a book sideways (or long-press it) to pick it up and move it; the order is
 /// saved to `Book.shelfOrder`. Drag on the case to scroll between shelves.
 /// Shelves are as wide as the screen, so the open Duo holds more per shelf.
 struct ShelfView: View {
@@ -28,6 +28,7 @@ struct ShelfView: View {
     @State private var fold: CGRect?
     @State private var centerY: Float = 0
     @State private var scrollStart: Float?
+    @State private var dragMode: DragMode?
     @State private var sizes: [UUID: BookSize] = [:]
     @State private var selectedID: UUID?
     @State private var held: Held?
@@ -320,20 +321,46 @@ struct ShelfView: View {
         }
     }
 
+    /// What a one-finger drag is doing, decided by its first movement.
+    private enum DragMode { case scroll, move }
+
+    /// Drag sideways on a book to pick it up and move it, as you would a
+    /// real one; drag up and down (or on the case) to scroll between
+    /// shelves. A long press also picks a book up.
     private var scrollGesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { value in
-                guard held == nil else { return }
-                let start = scrollStart ?? centerY
-                scrollStart = start
-                setCenter(start + Float(value.translation.height) / camera.scale, animated: false)
+                if dragMode == nil {
+                    let sideways = abs(value.translation.width) > abs(value.translation.height)
+                    if held == nil, sideways, bookID(at: value.startLocation) != nil {
+                        dragMode = .move
+                        longPress(.began, at: value.startLocation)
+                    } else {
+                        dragMode = .scroll
+                    }
+                }
+                switch dragMode {
+                case .move:
+                    longPress(.changed, at: value.location)
+                default:
+                    guard held == nil else { return }
+                    let start = scrollStart ?? centerY
+                    scrollStart = start
+                    setCenter(start + Float(value.translation.height) / camera.scale, animated: false)
+                }
             }
             .onEnded { value in
+                defer { dragMode = nil }
+                if dragMode == .move {
+                    longPress(.ended, at: value.location)
+                    return
+                }
                 guard let start = scrollStart else { return }
                 scrollStart = nil
                 let flick = reduceMotion ? value.translation.height : value.predictedEndTranslation.height
                 setCenter(start + Float(flick) / camera.scale, animated: !reduceMotion)
             }
+    }
     }
 
     private func scroll(by delta: Float, animated: Bool) {
