@@ -16,17 +16,31 @@ public struct ShelfCamera: Equatable, Sendable {
     public var viewSize: CGSize
     /// Height of the point the camera looks at.
     public var centerY: Float
+    /// How much bigger than standard the books are drawn, for larger text
+    /// sizes (see `zoom(forTextScale:)`).
+    public var zoom: Float
 
-    public init(viewSize: CGSize, centerY: Float = 0) {
+    public init(viewSize: CGSize, centerY: Float = 0, zoom: Float = 1) {
         self.viewSize = viewSize
         self.centerY = centerY
+        self.zoom = max(zoom, 0.5)
+    }
+
+    /// Screen points per scene unit at this zoom.
+    public var scale: Float { Self.pointsPerUnit * zoom }
+
+    /// The zoom for a Dynamic Type scale (body text size relative to the
+    /// default): books grow with larger text, up to half again as big, so
+    /// spine text stays readable. Smaller text sizes keep the standard size.
+    public static func zoom(forTextScale scale: CGFloat) -> Float {
+        Float(min(max(1 + (scale - 1) * 0.5, 1), 1.5))
     }
 
     private var halfFOVTangent: Float { tan(Self.fieldOfViewDegrees * .pi / 360) }
 
     /// Half the visible height at z = 0 (the front edge of the shelves).
-    public var halfHeight: Float { Float(max(viewSize.height, 1)) / 2 / Self.pointsPerUnit }
-    public var halfWidth: Float { Float(max(viewSize.width, 1)) / 2 / Self.pointsPerUnit }
+    public var halfHeight: Float { Float(max(viewSize.height, 1)) / 2 / scale }
+    public var halfWidth: Float { Float(max(viewSize.width, 1)) / 2 / scale }
 
     /// How far in front of z = 0 the camera sits for that scale.
     public var distance: Float { halfHeight / halfFOVTangent }

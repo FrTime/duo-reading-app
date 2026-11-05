@@ -187,7 +187,9 @@ public enum CoverImageSource: Codable, Hashable, Sendable {
 /// Everything needed to draw a book's jacket. The front image itself is
 /// stored next to the design as a file, not inside it.
 public struct CoverDesign: Codable, Hashable, Sendable {
-    public static let currentVersion = 1
+    /// Raised when the default layouts change, so automatic designs made
+    /// with older ones are rebuilt. 2: larger spine author text.
+    public static let currentVersion = 2
 
     /// The width-to-height ratio of every front cover.
     public static let frontAspectRatio = 2.0 / 3.0

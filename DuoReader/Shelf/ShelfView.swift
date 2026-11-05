@@ -16,6 +16,8 @@ struct ShelfView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Body text size in points (17 at the default setting).
+    @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 17
     @Query(sort: [SortDescriptor(\Book.shelfOrder), SortDescriptor(\Book.dateAdded)]) private var books: [Book]
     @AppStorage("shelf.displayMode") private var mode: ShelfDisplayMode = .spines
 
@@ -138,6 +140,13 @@ struct ShelfView: View {
             refresh(animated: old.size == new.size)
         }
         .onChange(of: reduceMotion) { _, _ in refresh(animated: false) }
+        .onChange(of: zoom) { _, _ in
+            guard viewSize != .zero else { return }
+            let range = scrollRange
+            centerY = range.upperBound
+            scene.setCamera(camera, animated: false)
+            refresh(animated: false)
+        }
         .task(id: sizeKey) { await loadSizes() }
     }
 
@@ -155,7 +164,10 @@ struct ShelfView: View {
         return books.first { $0.id == selectedID }
     }
 
-    private var camera: ShelfCamera { ShelfCamera(viewSize: viewSize, centerY: centerY) }
+    private var camera: ShelfCamera { ShelfCamera(viewSize: viewSize, centerY: centerY, zoom: zoom) }
+
+    /// Books grow with larger text sizes, so spine text stays readable.
+    private var zoom: Float { ShelfCamera.zoom(forTextScale: textScale / 17) }
 
     private var syncKey: SyncKey {
         SyncKey(
@@ -308,13 +320,13 @@ struct ShelfView: View {
                 guard held == nil else { return }
                 let start = scrollStart ?? centerY
                 scrollStart = start
-                setCenter(start + Float(value.translation.height) / ShelfCamera.pointsPerUnit, animated: false)
+                setCenter(start + Float(value.translation.height) / camera.scale, animated: false)
             }
             .onEnded { value in
                 guard let start = scrollStart else { return }
                 scrollStart = nil
                 let flick = reduceMotion ? value.translation.height : value.predictedEndTranslation.height
-                setCenter(start + Float(flick) / ShelfCamera.pointsPerUnit, animated: !reduceMotion)
+                setCenter(start + Float(flick) / camera.scale, animated: !reduceMotion)
             }
     }
 

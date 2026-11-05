@@ -49,6 +49,22 @@ enum ShelfTextures {
         }
     }
 
+    /// Wood for the uprights: the board's grain turned to run top to
+    /// bottom, with darker edges so each upright reads as its own board.
+    static func uprightImage() -> CGImage? {
+        guard let board = boardImage() else { return nil }
+        return draw(size: CGSize(width: board.height, height: board.width)) { context, size in
+            context.saveGState()
+            context.translateBy(x: size.width / 2, y: size.height / 2)
+            context.rotate(by: .pi / 2)
+            context.draw(board, in: CGRect(x: -size.height / 2, y: -size.width / 2, width: size.height, height: size.width))
+            context.restoreGState()
+            context.setFillColor(UIColor.black.withAlphaComponent(0.22).cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: 5, height: size.height))
+            context.fill(CGRect(x: size.width - 5, y: 0, width: 5, height: size.height))
+        }
+    }
+
     /// The back of one shelf: darker horizontal planks, in shadow under the
     /// board above.
     static func backPanelImage() -> CGImage? {

@@ -185,6 +185,14 @@ public struct ShelfLayout: Sendable {
         self.caseRowCount = max(rowCount + 1, minimumCaseRows)
     }
 
+    /// `x` moved just enough that something `halfExtent` wide either side of
+    /// it stays inside the case.
+    public func clampedX(_ x: Float, halfExtent: Float) -> Float {
+        let limit = shelfWidth / 2 - halfExtent
+        guard limit > 0 else { return 0 }
+        return min(max(x, -limit), limit)
+    }
+
     /// Shelves needed to cover a visible height, plus one spare.
     public static func rowsToFill(height: Float, metrics: ShelfMetrics = ShelfMetrics()) -> Int {
         Int((max(height, 0) / metrics.rowHeight).rounded(.up)) + 1

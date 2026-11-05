@@ -61,6 +61,20 @@ struct CoverStoreTests {
         #expect(rebuilt.imageSource == .embedded)
     }
 
+    @Test func rebuildsAutomaticCoversMadeWithOlderLayouts() async throws {
+        let store = store
+        let seed = CoverFixtures.seed()
+        let fresh = await store.prepare(seed)
+        var old = fresh
+        old.version = CoverDesign.currentVersion - 1
+        old.thickness = 0.3
+        try JSONEncoder().encode(old).write(to: store.designURL(for: seed.bookID))
+
+        let rebuilt = await store.prepare(seed)
+        #expect(rebuilt.version == CoverDesign.currentVersion)
+        #expect(rebuilt.thickness == fresh.thickness)
+    }
+
     @Test func keepsUserEditsWhenMetadataChanges() async throws {
         let store = store
         var seed = CoverFixtures.seed()

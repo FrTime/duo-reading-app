@@ -26,8 +26,10 @@ final class ShelfScene {
     private var bookStates: [UUID: BookState] = [:]
     private var targets: [UUID: Transform] = [:]
     private var textureTasks: [UUID: Task<Void, Never>] = [:]
+    /// The front texture size each book was last loaded at.
+    private var frontSizes: [UUID: Int] = [:]
     private var caseKey: CaseKey?
-    private var caseMaterials: (board: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: PhysicallyBasedMaterial)?
+    private var caseMaterials: (board: PhysicallyBasedMaterial, upright: PhysicallyBasedMaterial, back: PhysicallyBasedMaterial, wall: PhysicallyBasedMaterial)?
 
     private struct CaseKey: Equatable {
         var rows: Int
@@ -112,14 +114,17 @@ final class ShelfScene {
             targets[id] = nil
             textureTasks[id]?.cancel()
             textureTasks[id] = nil
+            frontSizes[id] = nil
         }
 
         let metrics = layout.metrics
         for state in states {
             let id = state.spec.id
             let entity = entity(for: state, metrics: metrics)
-            if bookStates[id]?.revision != state.revision || textureTasks[id] == nil, let book = coverFor(id) {
-                loadTextures(for: book, into: entity, id: id)
+            let frontSize = id == selected ? Self.selectedFrontPixels : Self.frontPixels
+            if bookStates[id]?.revision != state.revision || textureTasks[id] == nil || frontSizes[id] != frontSize,
+               let book = coverFor(id) {
+                loadTextures(for: book, into: entity, id: id, frontPixels: frontSize)
             }
             bookStates[id] = state
 
@@ -132,7 +137,7 @@ final class ShelfScene {
                 continue
             } else if let slot = layout.slot(for: id) {
                 transform = id == selected
-                    ? Self.selectedTransform(slot: slot, spec: state.spec, metrics: metrics)
+                    ? Self.selectedTransform(slot: slot, spec: state.spec, layout: layout)
                     : Self.restingTransform(slot: slot, spec: state.spec, metrics: metrics, mode: layout.mode)
             } else {
                 continue
@@ -188,11 +193,18 @@ final class ShelfScene {
 
     /// Pulled forward and turned to show the front cover, angled a little so
     /// the spine shows too.
-    static func selectedTransform(slot: ShelfLayout.Slot, spec: ShelfBookSpec, metrics: ShelfMetrics) -> Transform {
-        Transform(
-            scale: SIMD3(repeating: 1.25),
-            rotation: simd_quatf(angle: 0.35, axis: SIMD3(0, 1, 0)),
-            translation: SIMD3(slot.x, slot.baseY + slot.height / 2 + 0.02, 0.12)
+    static let selectedScale: Float = 1.25
+    static let selectedAngle: Float = 0.35
+
+    static func selectedTransform(slot: ShelfLayout.Slot, spec: ShelfBookSpec, layout: ShelfLayout) -> Transform {
+        // Turned to face the camera and enlarged, but kept inside the case
+        // so a book at either end doesn't slide off the screen.
+        let m = layout.metrics
+        let halfExtent = selectedScale * (m.width(of: spec) * cos(selectedAngle) + m.depth(of: spec) * sin(selectedAngle)) / 2
+        return Transform(
+            scale: SIMD3(repeating: selectedScale),
+            rotation: simd_quatf(angle: selectedAngle, axis: SIMD3(0, 1, 0)),
+            translation: SIMD3(layout.clampedX(slot.x, halfExtent: halfExtent), slot.baseY + slot.height / 2 + 0.02, 0.12)
         )
     }
 
@@ -242,15 +254,23 @@ final class ShelfScene {
         return materials(front: cover, spine: cover, back: cover)
     }
 
-    private func loadTextures(for book: Book, into entity: ModelEntity, id: UUID) {
+    /// Texture sizes, longest side in pixels. A face-out cover is about
+    /// 115 pt wide on screen, a spine a few tens of points; backs are only
+    /// seen when a book is turned in the hand. The pulled-out book gets a
+    /// sharper front. This keeps a few hundred books to roughly 100 MB.
+    static let frontPixels = 384
+    static let selectedFrontPixels = 900
+    static let spinePixels = 512
+    static let backPixels = 192
+
+    private func loadTextures(for book: Book, into entity: ModelEntity, id: UUID, frontPixels: Int) {
         textureTasks[id]?.cancel()
+        frontSizes[id] = frontPixels
         let covers = CoverLibrary.shared
         textureTasks[id] = Task { [weak entity] in
-            // Small textures: a spine is tens of points wide on screen, a
-            // face-out cover about 100 pt. 512 px keeps a big library light.
-            let front = await covers.image(.front, for: book, maxPixels: 512)
-            let spine = await covers.image(.spine, for: book, maxPixels: 512)
-            let back = await covers.image(.back, for: book, maxPixels: 512)
+            let front = await covers.image(.front, for: book, maxPixels: frontPixels)
+            let spine = await covers.image(.spine, for: book, maxPixels: Self.spinePixels)
+            let back = await covers.image(.back, for: book, maxPixels: Self.backPixels)
             guard !Task.isCancelled else { return }
             let frontMaterial = await ShelfTextures.material(from: front.cgImage, fallback: .cream)
             let spineMaterial = await ShelfTextures.material(from: spine.cgImage, fallback: .cream)
@@ -272,7 +292,8 @@ final class ShelfScene {
             let board = await ShelfTextures.material(from: ShelfTextures.boardImage(), fallback: ShelfTextures.wood, roughness: 0.45)
             let back = await ShelfTextures.material(from: ShelfTextures.backPanelImage(), fallback: ShelfTextures.wall, roughness: 0.7)
             let wall = ShelfTextures.solid(ShelfTextures.wall.darkened(0.45), roughness: 0.9)
-            caseMaterials = (board, back, wall)
+            let upright = await ShelfTextures.material(from: ShelfTextures.uprightImage(), fallback: ShelfTextures.wood, roughness: 0.45)
+            caseMaterials = (board, upright, back, wall)
         }
         guard let materials = caseMaterials, caseKey == key else { return }
 
@@ -307,7 +328,7 @@ final class ShelfScene {
             let height = layout.contentTop - layout.caseBottom
             let upright = ModelEntity(
                 mesh: .generateBox(width: divider.upperBound - divider.lowerBound, height: height, depth: depth),
-                materials: [materials.board]
+                materials: [materials.upright]
             )
             upright.position = SIMD3((divider.lowerBound + divider.upperBound) / 2, (layout.contentTop + layout.caseBottom) / 2, -depth / 2)
             caseRoot.addChild(upright)
@@ -319,7 +340,7 @@ final class ShelfScene {
         for side: Float in [-1, 1] {
             let panel = ModelEntity(
                 mesh: .generateBox(width: m.boardThickness, height: height, depth: depth),
-                materials: [materials.board]
+                materials: [materials.upright]
             )
             panel.position = SIMD3(side * (width / 2 + m.boardThickness / 2), midY, -depth / 2)
             caseRoot.addChild(panel)

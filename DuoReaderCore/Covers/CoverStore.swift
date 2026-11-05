@@ -82,11 +82,13 @@ public actor CoverStore {
     /// default cover the first time, and returns the design.
     ///
     /// Automatic designs are rebuilt when the book's metadata changes (say a
-    /// cover turned up on re-import). Designs the user edited are left alone.
+    /// cover turned up on re-import) or the templates' layout improves
+    /// (`CoverDesign.currentVersion`). Designs the user edited are left alone.
     @discardableResult
     public func prepare(_ seed: CoverSeed) -> CoverDesign {
         if let existing = design(for: seed.bookID),
-           existing.isUserEdited || existing.seedFingerprint == seed.fingerprint {
+           existing.isUserEdited
+            || (existing.seedFingerprint == seed.fingerprint && existing.version >= CoverDesign.currentVersion) {
             if !hasRenderedFaces(for: seed.bookID) {
                 let image = sourceImageData(for: seed.bookID).flatMap { Self.decodeImage($0, maxPixels: Self.maxSourcePixels) }
                 try? writeRendered(renderer.render(design: existing, image: image), for: seed.bookID)
