@@ -112,7 +112,7 @@ struct CoverDesignTests {
     @Test func thicknessFollowsPageCount() {
         #expect(abs(CoverDesign.thickness(forPageCount: 300) - 0.12) < 0.0001)
         #expect(CoverDesign.thickness(forPageCount: 0) == CoverDesign.thicknessRange.lowerBound)
-        #expect(CoverDesign.thickness(forPageCount: 100_000) == CoverDesign.thicknessRange.upperBound)
+        #expect(abs(CoverDesign.thickness(forPageCount: 100_000) - CoverDesign.thicknessRange.upperBound) < 1e-9)
     }
 
     @Test func clampsTextBoxesInsideTheFace() {

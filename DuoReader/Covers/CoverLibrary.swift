@@ -38,7 +38,7 @@ final class CoverLibrary {
     /// Call `metadataDidChange(for:)` after re-importing a book.
     func design(for book: Book) async -> CoverDesign {
         if let cached = designs[book.id] { return cached }
-        let design = await store.prepare(Self.seed(for: book))
+        let design = await store.prepare(measuredSeed(for: book))
         designs[book.id] = design
         return design
     }
@@ -47,7 +47,7 @@ final class CoverLibrary {
     /// the user edited aren't touched.
     func metadataDidChange(for book: Book) async {
         let previous = designs[book.id]
-        let design = await store.prepare(Self.seed(for: book))
+        let design = await store.prepare(measuredSeed(for: book))
         designs[book.id] = design
         if previous != design { bump(book.id) }
     }
@@ -94,7 +94,7 @@ final class CoverLibrary {
 
     /// Throws away the user's edits and goes back to the default cover.
     func resetToDefault(for book: Book) async {
-        let design = await store.reset(Self.seed(for: book))
+        let design = await store.reset(measuredSeed(for: book))
         designs[book.id] = design
         bump(book.id)
     }
@@ -128,6 +128,19 @@ final class CoverLibrary {
             return try? context.fetch(descriptor).first?.coverSeed
         }.value
         return seed ?? book.coverSeed
+    }
+
+    /// The cover seed plus the book's measured length, for its spine. The
+    /// length is measured once (reading the file) and cached beside the cover.
+    func measuredSeed(for book: Book) async -> CoverSeed {
+        var seed = await Self.seed(for: book)
+        let file = LibraryActions.fileURL(for: book)
+        let format = book.format
+        let cache = store.pageCountURL(for: book.id)
+        seed.pageCount = await Task.detached(priority: .userInitiated) {
+            await BookLength.cachedPageCount(of: file, format: format, cache: cache)
+        }.value
+        return seed
     }
 
     private func bump(_ bookID: UUID) {

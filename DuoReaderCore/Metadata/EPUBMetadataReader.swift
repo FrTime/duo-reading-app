@@ -153,6 +153,9 @@ struct OPFPackage {
     var metadata = BookMetadata()
     var coverHref: String?
     var spineHrefs: [String] = []
+    /// `rendition:layout` is `pre-paginated`: every spine item is one page
+    /// (comics and other fixed-layout books).
+    var isFixedLayout = false
 }
 
 enum OPFParser {
@@ -176,6 +179,7 @@ enum OPFParser {
         var spine: [String] = []
         var coverID: String?
         var guideCoverHref: String?
+        var isFixedLayout = false
 
         private var text = ""
         private var inMetadata = false
@@ -246,7 +250,9 @@ enum OPFParser {
             case "source": if let v = value.nilIfBlank { metadata.identifiers.append(v) }
             case "meta":
                 if let property = currentProperty, !value.isEmpty {
-                    if property == "belongs-to-collection", let id = currentID {
+                    if property == "rendition:layout", currentRefines == nil {
+                        isFixedLayout = value == "pre-paginated"
+                    } else if property == "belongs-to-collection", let id = currentID {
                         collectionIDs.insert(id)
                         if metadata.series == nil { metadata.series = value }
                     } else if let target = currentRefines {
@@ -267,6 +273,7 @@ enum OPFParser {
 
             var package = OPFPackage(metadata: metadata)
             package.spineHrefs = spine.compactMap { manifest[$0]?.href }
+            package.isFixedLayout = isFixedLayout
 
             // EPUB 3 cover-image property, then the EPUB 2 <meta name="cover">,
             // then any image item whose id or href says "cover".

@@ -388,7 +388,14 @@ struct CoverBookPanel: View {
             VStack(alignment: .leading) {
                 Text("Spine thickness")
                     .font(.subheadline)
-                Slider(value: $model.design.thickness, in: CoverDesign.thicknessRange) {
+                Slider(value: Binding(
+                    get: { model.design.thickness },
+                    set: {
+                        model.design.thickness = $0
+                        // From now on the spine stays as the user set it.
+                        model.design.isThicknessCustom = true
+                    }
+                ), in: CoverDesign.thicknessRange) {
                     Text("Spine thickness")
                 } minimumValueLabel: {
                     Text("Thin").font(.caption)
@@ -403,7 +410,7 @@ struct CoverBookPanel: View {
                 Text("Book size")
                     .font(.subheadline)
                 Slider(value: Binding(
-                    get: { model.design.sizeScale(for: model.book.id) },
+                    get: { model.design.sizeScale(for: model.book.id, seriesKey: model.book.seriesKey) },
                     set: { model.design.heightScale = $0 }
                 ), in: CoverDesign.heightScaleRange) {
                     Text("Book size")

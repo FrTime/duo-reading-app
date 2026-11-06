@@ -267,7 +267,7 @@ struct ShelfView: View {
         for book in books {
             let design = await covers.design(for: book)
             guard !Task.isCancelled else { return }
-            let size = BookSize(thickness: design.thickness, heightScale: design.sizeScale(for: book.id))
+            let size = BookSize(thickness: design.thickness, heightScale: design.sizeScale(for: book.id, seriesKey: book.seriesKey))
             if sizes[book.id] != size {
                 sizes[book.id] = size
             }

@@ -10,6 +10,9 @@ public struct CoverSeed: Hashable, Sendable {
     public var seriesIndex: Double?
     public var summary: String?
     public var wordCount: Int?
+    /// Printed pages, measured from the file (`BookLength`). Nil until
+    /// measured, or when it can't be told.
+    public var pageCount: Int?
     /// The cover image bytes from the file, if it had one.
     public var embeddedCoverData: Data?
 
@@ -21,6 +24,7 @@ public struct CoverSeed: Hashable, Sendable {
         seriesIndex: Double? = nil,
         summary: String? = nil,
         wordCount: Int? = nil,
+        pageCount: Int? = nil,
         embeddedCoverData: Data? = nil
     ) {
         self.bookID = bookID
@@ -30,6 +34,7 @@ public struct CoverSeed: Hashable, Sendable {
         self.seriesIndex = seriesIndex
         self.summary = summary
         self.wordCount = wordCount
+        self.pageCount = pageCount
         self.embeddedCoverData = embeddedCoverData
     }
 
@@ -53,6 +58,7 @@ public struct CoverSeed: Hashable, Sendable {
         var parts = [title, authors.joined(separator: "\u{1F}"), series ?? "", seriesIndex.map { String($0) } ?? ""]
         parts.append(summary ?? "")
         parts.append(wordCount.map(String.init) ?? "")
+        parts.append(pageCount.map(String.init) ?? "")
         parts.append(embeddedCoverData.map { "\($0.count)-\($0.prefix(64).base64EncodedString())-\($0.suffix(64).base64EncodedString())" } ?? "")
         var hash: UInt64 = 0xcbf29ce484222325
         for byte in parts.joined(separator: "\u{1E}").utf8 {
@@ -62,11 +68,12 @@ public struct CoverSeed: Hashable, Sendable {
         return String(hash, radix: 16)
     }
 
-    /// A rough page count for sizing the spine: about 275 words a page, and a
-    /// typical novel when we can't tell.
+    /// A rough page count for sizing the spine: AO3's word count at about
+    /// 275 words a page, else the measured length, else a typical novel.
     public var estimatedPageCount: Int {
-        guard let wordCount, wordCount > 0 else { return 300 }
-        return max(wordCount / 275, 8)
+        if let wordCount, wordCount > 0 { return max(wordCount / BookLength.wordsPerPage, 8) }
+        if let pageCount, pageCount > 0 { return max(pageCount, 8) }
+        return 300
     }
 
     /// The summary trimmed to fit on the back of the jacket.
