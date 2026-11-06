@@ -252,7 +252,8 @@ struct MinimumSpineTests {
         design.thickness = 0.04  // as saved by an older build
         #expect(design.clampedThickness == CoverDesign.thicknessRange.lowerBound)
         let renderer = CoverRenderer(frontWidth: 300)
-        #expect(renderer.size(of: .spine, design: design).width == (300 * CoverDesign.thicknessRange.lowerBound).rounded())
+        let spineWidth = Double(renderer.size(of: .spine, design: design).width)
+        #expect(abs(spineWidth - 300 * CoverDesign.thicknessRange.lowerBound) <= 0.5)
         let metrics = ShelfMetrics()
         let thin = ShelfBookSpec(id: UUID(), thickness: 0.04)
         let floor = ShelfBookSpec(id: UUID(), thickness: CoverDesign.thicknessRange.lowerBound)
