@@ -115,8 +115,9 @@ struct LibraryView: View {
         } else {
             switch layout {
             case .shelf where showsShelf:
+                // The shelf runs under the bottom search field itself and
+                // keeps its book card above it.
                 ShelfView(onOpen: open, onEditCover: { editingBook = $0 }, onDelete: { bookPendingDelete = $0 })
-                    .ignoresSafeArea(edges: .bottom)
                     // Light title and buttons over the dark wood.
                     .toolbarColorScheme(.dark, for: .navigationBar)
             case .shelf, .grid: grid
