@@ -248,3 +248,19 @@ struct ShelfCameraTests {
         #expect(abs(tall.upperBound - (0.3 + 0.03 - 0.6)) < 1e-5)
     }
 }
+
+struct ShelfEdgeGapTests {
+    /// The case's sides stay clear of the screen edges, even on the closed
+    /// Duo's narrower screen, and the gap is the same on both sides.
+    @Test(arguments: [CGFloat(360), 466, 867, 1100])
+    func caseSidesClearTheEdges(width: CGFloat) {
+        let camera = ShelfCamera(viewSize: CGSize(width: width, height: 700))
+        let metrics = ShelfMetrics()
+        let outer = camera.shelfWidth / 2 + metrics.boardThickness
+        let left = camera.screenPoint(for: SIMD3(-outer, 0, 0)).x
+        let right = camera.screenPoint(for: SIMD3(outer, 0, 0)).x
+        #expect(left >= CGFloat(ShelfCamera.minimumEdgeGapPoints) - 0.5)
+        #expect(width - right >= CGFloat(ShelfCamera.minimumEdgeGapPoints) - 0.5)
+        #expect(abs(left - (width - right)) < 0.5)
+    }
+}

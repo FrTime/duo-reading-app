@@ -113,11 +113,16 @@ private struct TextBoxHandle: View {
             .frame(width: max(rect.width, 8), height: max(rect.height, 8))
             .overlay(alignment: .bottomTrailing) {
                 if isSelected {
+                    // Drawn in proportion to the cover so it doesn't swamp a
+                    // small preview, but always grabbed by a finger-sized area.
+                    let dot = Self.handleDiameter(canvasHeight: canvas.height)
                     Circle()
                         .fill(Color.accentColor)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
-                        .frame(width: 22, height: 22)
-                        .offset(x: 11, y: 11)
+                        .overlay(Circle().stroke(.white, lineWidth: dot > 16 ? 2 : 1.5))
+                        .frame(width: dot, height: dot)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                        .offset(x: 18, y: 18)
                         .gesture(resizeGesture)
                         .accessibilityHidden(true)
                 }
@@ -130,6 +135,12 @@ private struct TextBoxHandle: View {
             .accessibilityHint(Text("Text box. Double-tap to edit."))
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { select() }
+    }
+
+    /// 22 pt on a full-size cover, down to 12 pt on a thumbnail. By height,
+    /// so the narrow spine gets the same handle as the front.
+    static func handleDiameter(canvasHeight: CGFloat) -> CGFloat {
+        min(22, max(12, canvasHeight * 0.06))
     }
 
     private func select() {

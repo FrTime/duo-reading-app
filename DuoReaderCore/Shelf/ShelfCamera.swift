@@ -52,8 +52,18 @@ public struct ShelfCamera: Equatable, Sendable {
 
     public var position: SIMD3<Float> { SIMD3(0, centerY, distance) }
 
-    /// Shelf width that fits the screen with a little wall either side.
-    public var shelfWidth: Float { halfWidth * 2 * 0.94 }
+    /// Smallest gap, in points, between the case's sides and the screen edges.
+    public static let minimumEdgeGapPoints: Float = 16
+
+    /// Shelf width that fits the case, sides included, on the screen with
+    /// an even gap either side. The case's side panels sit outside the
+    /// shelf width, so they're taken off too: without that the case ran to
+    /// the very edge of narrower screens like the closed Duo.
+    public var shelfWidth: Float {
+        let width = halfWidth * 2
+        let gap = max(width * 0.03, Self.minimumEdgeGapPoints / scale)
+        return width - 2 * (gap + ShelfMetrics().boardThickness)
+    }
 
     /// The scene position under a screen point, on the plane at depth `z`.
     public func scenePoint(for point: CGPoint, atZ z: Float = 0) -> SIMD2<Float> {
