@@ -4,9 +4,8 @@ import SwiftUI
 /// spine and back, place text, and turn the book in 3D. Starts from the
 /// book's current cover (its own artwork the first time).
 ///
-/// When the window is wide (the open Duo, landscape) the cover and the tools
-/// sit side by side, one on each half of the screen; otherwise the tools sit
-/// under the cover.
+/// When the window is wide (the open Duo) or in landscape, the cover and the
+/// tools sit side by side; otherwise the tools sit under the cover.
 struct CoverEditorView: View {
     @State private var model: CoverEditorModel
     @Environment(\.dismiss) private var dismiss
@@ -20,23 +19,21 @@ struct CoverEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if sizeClass == .regular {
+            GeometryReader { proxy in
+                if Self.isSideBySide(sizeClass: sizeClass, size: proxy.size) {
                     // On the open Duo the cover sits on the left screen and the
-                    // tools on the right, with nothing on the hinge. One
-                    // layout either way, so the stage keeps its identity
-                    // when the fold appears.
-                    GeometryReader { proxy in
-                        let fold = Self.usableFold(in: proxy)
-                        HStack(spacing: 0) {
-                            stageArea
-                                .frame(width: fold?.minX ?? proxy.size.width * 0.55)
-                            Divider()
-                                .frame(width: fold?.width ?? 1)
-                            panelArea
-                        }
-                        .frame(width: proxy.size.width, height: proxy.size.height)
+                    // tools on the right, with nothing on the hinge. Landscape
+                    // on the closed Duo is side by side too: stacked, the
+                    // cover shrank to a thumbnail and the tools to a sliver.
+                    let fold = Self.usableFold(in: proxy)
+                    HStack(spacing: 0) {
+                        stageArea
+                            .frame(width: fold?.minX ?? proxy.size.width * 0.55)
+                        Divider()
+                            .frame(width: fold?.width ?? 1)
+                        panelArea
                     }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 } else {
                     VStack(spacing: 0) {
                         stageArea
@@ -44,6 +41,7 @@ struct CoverEditorView: View {
                         panelArea
                             .frame(maxHeight: .infinity)
                     }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 }
             }
             .navigationTitle("Edit cover")
@@ -167,6 +165,12 @@ struct CoverEditorView: View {
             }
             .disabled(!model.isLoaded || model.isSaving)
         }
+    }
+
+    /// Cover and tools side by side: on wide windows (the open Duo) and in
+    /// landscape, where stacking them leaves neither enough height.
+    nonisolated static func isSideBySide(sizeClass: UserInterfaceSizeClass?, size: CGSize) -> Bool {
+        sizeClass == .regular || size.width > size.height
     }
 
     /// The hinge, when there's room for the stage on one side of it and
