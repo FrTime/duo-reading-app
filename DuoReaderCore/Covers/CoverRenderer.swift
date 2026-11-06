@@ -45,7 +45,7 @@ public struct CoverRenderer: Sendable {
         case .front, .back:
             return CGSize(width: frontWidth.rounded(), height: height)
         case .spine:
-            return CGSize(width: max((frontWidth * design.thickness).rounded(), 4), height: height)
+            return CGSize(width: max((frontWidth * design.clampedThickness).rounded(), 4), height: height)
         }
     }
 

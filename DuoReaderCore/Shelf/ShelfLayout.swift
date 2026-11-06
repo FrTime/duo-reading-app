@@ -73,7 +73,8 @@ public struct ShelfMetrics: Hashable, Sendable {
 
     /// Thickness of a book's block, front cover to back cover.
     public func depth(of book: ShelfBookSpec) -> Float {
-        max(width(of: book) * Float(book.thickness), 0.006)
+        let thickness = min(max(book.thickness, CoverDesign.thicknessRange.lowerBound), CoverDesign.thicknessRange.upperBound)
+        return width(of: book) * Float(thickness)
     }
 }
 

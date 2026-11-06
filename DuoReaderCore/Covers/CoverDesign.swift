@@ -190,12 +190,18 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// Raised when the default layouts change, so automatic designs made
     /// with older ones are rebuilt. 2: larger spine author text. 3: spine
     /// thickness from every book's measured length, not just AO3 word counts.
-    public static let currentVersion = 3
+    /// 4: thinnest spine raised so its title stays legible.
+    public static let currentVersion = 4
 
     /// The width-to-height ratio of every front cover.
     public static let frontAspectRatio = 2.0 / 3.0
-    /// Spine width as a fraction of the front's width.
-    public static let thicknessRange = 0.04...0.35
+    /// Spine width as a fraction of the front's width. The floor keeps a
+    /// short book's spine wide enough to read its title on the shelf (at
+    /// 0.04 it came out about 5 pt on the Duo); books under about 150 pages
+    /// all sit there.
+    public static let thicknessRange = 0.07...0.35
+    /// The thinnest spine before 0.07, used to recognise old automatic designs.
+    static let legacyMinimumThickness = 0.04
 
     public var version: Int
     public var template: CoverTemplate
@@ -262,6 +268,12 @@ public struct CoverDesign: Codable, Hashable, Sendable {
 
     public var hasImage: Bool { imageSource != .none }
 
+    /// `thickness` within `thicknessRange`. Designs saved before the floor
+    /// went up can hold a thinner value.
+    public var clampedThickness: Double {
+        min(max(thickness, Self.thicknessRange.lowerBound), Self.thicknessRange.upperBound)
+    }
+
     /// Book sizes the user can pick, relative to a standard paperback.
     public static let heightScaleRange = 0.8...1.15
 
@@ -326,8 +338,9 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// count on the old straight-line scale), since a slider rarely lands there.
     public func followsBookLength(seed: CoverSeed) -> Bool {
         if let isThicknessCustom { return !isThicknessCustom }
+        if abs(thickness - Self.thicknessRange.lowerBound) < 1e-6 { return true }
         let legacyPages = seed.wordCount.flatMap { $0 > 0 ? max($0 / BookLength.wordsPerPage, 8) : nil } ?? 300
-        let legacy = min(max(0.02 + Double(legacyPages) / 300 * 0.10, Self.thicknessRange.lowerBound), Self.thicknessRange.upperBound)
+        let legacy = min(max(0.02 + Double(legacyPages) / 300 * 0.10, Self.legacyMinimumThickness), Self.thicknessRange.upperBound)
         return abs(thickness - legacy) < 1e-6
     }
 }

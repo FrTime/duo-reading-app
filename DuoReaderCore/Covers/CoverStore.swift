@@ -106,6 +106,15 @@ public actor CoverStore {
                 return existing
             }
         }
+        if var existing = design(for: seed.bookID), existing.isUserEdited,
+           existing.thickness < CoverDesign.thicknessRange.lowerBound - 1e-9 {
+            // A spine the user made thinner than today's minimum is widened
+            // to it, so its title stays legible.
+            existing.thickness = existing.clampedThickness
+            let image = sourceImageData(for: seed.bookID).flatMap { Self.decodeImage($0, maxPixels: Self.maxSourcePixels) }
+            try? write(design: existing, image: .keep, rendered: renderer.render(design: existing, image: image), for: seed.bookID)
+            return existing
+        }
         if let existing = design(for: seed.bookID),
            existing.isUserEdited
             || (existing.seedFingerprint == seed.fingerprint && existing.version >= CoverDesign.currentVersion) {
