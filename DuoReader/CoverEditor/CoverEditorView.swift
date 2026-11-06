@@ -22,7 +22,20 @@ struct CoverEditorView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
-                if Self.isSideBySide(sizeClass: sizeClass, size: proxy.size) {
+                if let fold = Self.horizontalFold(in: proxy) {
+                    // The open Duo turned so the hinge runs across: the
+                    // cover on the top half, the tools on the bottom, like
+                    // the pages of a book held open, with nothing on the fold.
+                    VStack(spacing: 0) {
+                        stageArea
+                            .frame(height: fold.minY)
+                        Divider()
+                            .frame(height: fold.height)
+                        panelArea
+                            .frame(maxHeight: .infinity)
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else if Self.isSideBySide(sizeClass: sizeClass, size: proxy.size) {
                     // On the open Duo the cover sits on the left screen and the
                     // tools on the right, with nothing on the hinge. Landscape
                     // on the closed Duo is side by side too: stacked, the
@@ -109,7 +122,9 @@ struct CoverEditorView: View {
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.secondarySystemBackground))
+        // Not up under the navigation bar: there the two halves' colours
+        // met under the centred "Edit cover" title and split it in two.
+        .background(Color(.secondarySystemBackground), ignoresSafeAreaEdges: .bottom)
     }
 
     private var panelArea: some View {
@@ -207,6 +222,16 @@ struct CoverEditorView: View {
     /// landscape, where stacking them leaves neither enough height.
     nonisolated static func isSideBySide(sizeClass: UserInterfaceSizeClass?, size: CGSize) -> Bool {
         sizeClass == .regular || size.width > size.height
+    }
+
+    /// The hinge when it runs left to right, with room for the stage above
+    /// it and the tools below.
+    nonisolated static func horizontalFold(in proxy: GeometryProxy) -> CGRect? {
+        guard let fold = proxy.reservedRegions(kind: .division).first?.frame,
+              fold.width > fold.height,
+              fold.minY > 200, proxy.size.height - fold.maxY > 240
+        else { return nil }
+        return fold
     }
 
     /// The hinge, when there's room for the stage on one side of it and
