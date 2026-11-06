@@ -77,7 +77,9 @@ struct SeriesSizeTests {
 
 struct ThicknessTests {
     @Test func growsWithLengthAndNeverHitsTheCeilingEarly() {
-        let pages = [8, 50, 200, 300, 600, 900, 1500, 3000]
+        // Under about 60 pages every book sits at the thinnest spine.
+        #expect(CoverDesign.thickness(forPageCount: 8) == CoverDesign.thicknessRange.lowerBound)
+        let pages = [60, 200, 300, 600, 900, 1500, 3000]
         let values = pages.map(CoverDesign.thickness(forPageCount:))
         for (a, b) in zip(values, values.dropFirst()) {
             #expect(b > a)
