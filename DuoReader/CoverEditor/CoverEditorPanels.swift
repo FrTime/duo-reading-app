@@ -410,7 +410,7 @@ struct CoverBookPanel: View {
                 Text("Book size")
                     .font(.subheadline)
                 Slider(value: Binding(
-                    get: { model.design.sizeScale(for: model.book.id, seriesKey: model.book.seriesKey) },
+                    get: { model.sizeScale },
                     set: { model.design.heightScale = $0 }
                 ), in: CoverDesign.heightScaleRange) {
                     Text("Book size")

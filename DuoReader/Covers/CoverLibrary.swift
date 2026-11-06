@@ -18,6 +18,9 @@ final class CoverLibrary {
     private var revisions: [UUID: Int] = [:]
     private let images = NSCache<NSString, UIImage>()
     @ObservationIgnored private var designs: [UUID: CoverDesign] = [:]
+    /// Designs being prepared, so the shelf and a cover image asking for the
+    /// same book at once measure and render it only once.
+    @ObservationIgnored private var pending: [UUID: Task<CoverDesign, Never>] = [:]
 
     init(store: CoverStore) {
         self.store = store
@@ -38,8 +41,15 @@ final class CoverLibrary {
     /// Call `metadataDidChange(for:)` after re-importing a book.
     func design(for book: Book) async -> CoverDesign {
         if let cached = designs[book.id] { return cached }
-        let design = await store.prepare(measuredSeed(for: book))
-        designs[book.id] = design
+        let id = book.id
+        if let task = pending[id] { return await task.value }
+        let task = Task { await store.prepare(measuredSeed(for: book)) }
+        pending[id] = task
+        let design = await task.value
+        pending[id] = nil
+        // A save or reset while this was in flight wins.
+        if let newer = designs[id] { return newer }
+        designs[id] = design
         return design
     }
 

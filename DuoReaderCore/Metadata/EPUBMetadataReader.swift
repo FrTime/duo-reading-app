@@ -39,7 +39,7 @@ public struct EPUBMetadataReader: MetadataReader {
 
         if let coverHref = package.coverHref {
             let path = Self.resolve(coverHref, relativeTo: base)
-            if let entry = try await archive.get(path), Int64(entry.uncompressedSize) <= Self.maxCoverBytes {
+            if let entry = try await archive.get(path), Int64(clamping: entry.uncompressedSize) <= Self.maxCoverBytes {
                 metadata.coverImageData = try await Self.data(at: path, in: archive, limit: Self.maxCoverBytes)
             }
         }
@@ -74,7 +74,7 @@ public struct EPUBMetadataReader: MetadataReader {
     /// declared size and by what actually inflates (the header can lie).
     static func data(at path: String, in archive: Archive, limit: Int64 = maxDocumentBytes) async throws -> Data? {
         guard let entry = try await archive.get(path) else { return nil }
-        guard Int64(entry.uncompressedSize) <= limit else {
+        guard Int64(clamping: entry.uncompressedSize) <= limit else {
             throw MetadataError.malformed("Entry too large: \(path)")
         }
         let buffer = Mutex(Data())

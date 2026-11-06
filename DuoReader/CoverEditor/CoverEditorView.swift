@@ -98,7 +98,7 @@ struct CoverEditorView: View {
                             rendered: model.rendered,
                             revision: model.renderRevision,
                             thickness: model.design.thickness,
-                            heightScale: model.design.sizeScale(for: model.book.id, seriesKey: model.book.seriesKey)
+                            heightScale: model.sizeScale
                         )
                     }
                 }

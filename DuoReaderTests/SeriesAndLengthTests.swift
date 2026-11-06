@@ -18,6 +18,9 @@ struct SeriesKeyTests {
         }
         #expect(SeriesKey.fromTitle("The Expanse Book 2") == "expanse")
         #expect(SeriesKey.fromTitle("One Piece, Vol. 101") == "one piece")
+        // A volume word has to stand apart, so it can't eat the end of the name.
+        #expect(SeriesKey.fromTitle("Domino 2") == "domino")
+        #expect(SeriesKey.fromTitle("Kiev 3") == "kiev")
     }
 
     @Test func titlesWithoutAVolumeHaveNoSeries() {
@@ -154,7 +157,7 @@ struct BookLengthTests {
         #expect(count.words == 5)
     }
 
-    @Test func countsPDFPages() throws {
+    @Test func countsPDFPages() async throws {
         let url = Fixtures.temporaryURL("pages.pdf")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 100, height: 150)).writePDF(to: url) { context in
@@ -174,11 +177,15 @@ struct BookLengthTests {
         let url = try await Fixtures.epub(files)
         let cache = Fixtures.temporaryURL("pages")
         #expect(await BookLength.cachedPageCount(of: url, format: .epub, cache: cache) == 5)
-        // Later reads come from the cache, even if the file goes away.
-        try FileManager.default.removeItem(at: url)
+        let stamp = try #require(BookLength.fileStamp(of: url))
+        // Later reads come from the cache.
+        try Data("\(BookLength.cacheVersion):\(stamp):42".utf8).write(to: cache)
+        #expect(await BookLength.cachedPageCount(of: url, format: .epub, cache: cache) == 42)
+        // A different file (size or date) is measured again.
+        try Data("\(BookLength.cacheVersion):1-1:42".utf8).write(to: cache)
         #expect(await BookLength.cachedPageCount(of: url, format: .epub, cache: cache) == 5)
-        #expect(BookLength.parseCache("0:5") == nil)
-        #expect(BookLength.parseCache("garbage") == nil)
+        #expect(BookLength.parseCache("0:\(stamp):5", stamp: stamp) == nil)
+        #expect(BookLength.parseCache("garbage", stamp: stamp) == nil)
     }
 
     @Test func doesNotCacheAMissingFile() async {

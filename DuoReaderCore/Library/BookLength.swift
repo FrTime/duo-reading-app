@@ -31,26 +31,36 @@ public enum BookLength {
     /// The page count from the cache file, measuring the book (and writing the
     /// cache) the first time. A book whose length can't be told is cached as 0
     /// so it isn't read again every launch.
+    /// The cache is keyed by the file's size and modification date, so a
+    /// replaced file is measured again.
     public static func cachedPageCount(of url: URL, format: BookFormat, cache: URL) async -> Int? {
-        if let text = try? String(contentsOf: cache, encoding: .utf8), let value = parseCache(text) {
+        // Only measure and cache a file that's actually there: a book still
+        // downloading would otherwise be stuck at "unknown".
+        guard let stamp = fileStamp(of: url) else { return nil }
+        if let text = try? String(contentsOf: cache, encoding: .utf8), let value = parseCache(text, stamp: stamp) {
             return value > 0 ? value : nil
         }
         let pages = await pageCount(of: url, format: format)
-        // Only cache a result for a file that's actually there: a book still
-        // downloading would otherwise be stuck at "unknown".
-        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
-            try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? Data("\(cacheVersion):\(pages ?? 0)".utf8).write(to: cache, options: .atomic)
-        }
+        try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("\(cacheVersion):\(stamp):\(pages ?? 0)".utf8).write(to: cache, options: .atomic)
         return pages
     }
 
     /// Raised when the measuring changes, so cached lengths are taken again.
     static let cacheVersion = 1
 
-    static func parseCache(_ text: String) -> Int? {
+    /// "<bytes>-<modified seconds>", or nil when the file isn't there.
+    static func fileStamp(of url: URL) -> String? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+              let size = values.fileSize else { return nil }
+        let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
+        return "\(size)-\(modified)"
+    }
+
+    static func parseCache(_ text: String, stamp: String) -> Int? {
         let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ":")
-        guard parts.count == 2, Int(parts[0]) == cacheVersion, let value = Int(parts[1]), value >= 0 else { return nil }
+        guard parts.count == 3, Int(parts[0]) == cacheVersion, parts[1] == stamp,
+              let value = Int(parts[2]), value >= 0 else { return nil }
         return value
     }
 
@@ -74,13 +84,15 @@ public enum BookLength {
         var budget = maxTextBytes
         for href in package.spineHrefs.uniqued() {
             let path = EPUBMetadataReader.resolve(href, relativeTo: base)
-            guard budget > 0, let entry = try? await archive.get(path) else { continue }
-            let size = Int64(entry.uncompressedSize)
+            guard let entry = try? await archive.get(path) else { continue }
+            // A crafted zip64 header can claim more than Int64 holds.
+            let size = Int64(clamping: entry.uncompressedSize)
             if size > EPUBMetadataReader.maxDocumentBytes || size > budget {
-                // Too big to read: estimate from its size (markup is about a
-                // quarter of a typical chapter file, words about 6 bytes).
-                counts.words += Int(Double(size) * 0.75 / 6)
-                budget -= size
+                // Too big to read, or past the read budget: estimate from its
+                // size (markup is about a quarter of a typical chapter file,
+                // words about 6 bytes), capped so a lying header can't make
+                // the book absurdly long.
+                counts.words += Int(Double(min(size, maxTextBytes)) * 0.75 / 6)
                 continue
             }
             guard let data = try? await EPUBMetadataReader.data(at: path, in: archive) else { continue }

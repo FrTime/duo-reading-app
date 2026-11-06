@@ -20,7 +20,7 @@ public enum SeriesKey {
             .replacing(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/, with: " ")
             .replacing("_", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let pattern = /^(?<name>.+?)[\s,:;.\-–—]*(?:(?:vol(?:ume)?|v|book|bk|part|pt|tome|no|#)\.?\s*)?(?<number>\d{1,4}(?:\.\d+)?)$/
+        let pattern = /^(?<name>.+?)(?:[\s,:;.\-–—]+(?:vol(?:ume)?|v|book|bk|part|pt|tome|no|#)\.?\s*|[\s,:;.\-–—]*)(?<number>\d{1,4}(?:\.\d+)?)$/
             .ignoresCase()
         guard let match = stripped.wholeMatch(of: pattern) else { return nil }
         let name = String(match.output.name)

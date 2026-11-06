@@ -41,6 +41,8 @@ final class CoverEditorModel {
     }
 
     let book: Book
+    /// Books in one series share a default size (`Book.seriesKey`).
+    let seriesKey: String?
     let seed: CoverSeed
     private let covers: CoverLibrary
     /// Preview width for the front and back; the spine follows the thickness.
@@ -68,6 +70,7 @@ final class CoverEditorModel {
     init(book: Book, covers: CoverLibrary = .shared) {
         self.book = book
         self.seed = book.coverSeed
+        self.seriesKey = book.seriesKey
         self.covers = covers
         self.palette = .generated(for: book.title)
         // A stand-in until `load()` reads the saved design.
@@ -83,6 +86,9 @@ final class CoverEditorModel {
         if case .keep = imageChange { return design != savedDesign }
         return true
     }
+
+    /// The book's size on the shelf.
+    var sizeScale: Double { design.sizeScale(for: book.id, seriesKey: seriesKey) }
 
     var hasEmbeddedCover: Bool { seed.embeddedCoverData != nil }
 
