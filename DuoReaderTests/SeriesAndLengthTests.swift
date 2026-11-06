@@ -77,7 +77,7 @@ struct SeriesSizeTests {
 
 struct ThicknessTests {
     @Test func growsWithLengthAndNeverHitsTheCeilingEarly() {
-        // Under about 60 pages every book sits at the thinnest spine.
+        // Under about 150 pages every book sits at the thinnest spine.
         #expect(CoverDesign.thickness(forPageCount: 8) == CoverDesign.thicknessRange.lowerBound)
         let pages = [60, 200, 300, 600, 900, 1500, 3000]
         let values = pages.map(CoverDesign.thickness(forPageCount:))
@@ -227,11 +227,56 @@ struct LengthOnEditedCoversTests {
         #expect(followed.isThicknessCustom == false)
 
         var resized = followed
-        resized.thickness = 0.05
+        resized.thickness = 0.09
         resized.isThicknessCustom = true
         try await store.save(resized, image: .keep, for: seed.bookID)
         seed.pageCount = 100
         let kept = await store.prepare(seed)
-        #expect(abs(kept.thickness - 0.05) < 1e-9)
+        #expect(abs(kept.thickness - 0.09) < 1e-9)
     }
 }
+
+struct MinimumSpineTests {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: "MinimumSpineTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+
+    @Test func shortBooksGetALegibleSpine() {
+        #expect(CoverDesign.thickness(forPageCount: 10) == CoverDesign.thicknessRange.lowerBound)
+        #expect(CoverDesign.thicknessRange.lowerBound >= 0.07)
+        // Longer books still grow from the floor.
+        #expect(CoverDesign.thickness(forPageCount: 200) > CoverDesign.thicknessRange.lowerBound)
+    }
+
+    @Test func oldThinDesignsAreWidenedEverywhere() {
+        var design = CoverTemplate.classic.makeDesign(seed: CoverFixtures.seed(), palette: .generated(for: "x"), imageSource: .none)
+        design.thickness = 0.04  // as saved by an older build
+        #expect(design.clampedThickness == CoverDesign.thicknessRange.lowerBound)
+        let renderer = CoverRenderer(frontWidth: 300)
+        let spineWidth = Double(renderer.size(of: .spine, design: design).width)
+        #expect(abs(spineWidth - 300 * CoverDesign.thicknessRange.lowerBound) <= 0.5)
+        let metrics = ShelfMetrics()
+        let thin = ShelfBookSpec(id: UUID(), thickness: 0.04)
+        let floor = ShelfBookSpec(id: UUID(), thickness: CoverDesign.thicknessRange.lowerBound)
+        #expect(metrics.depth(of: thin) == metrics.depth(of: floor))
+    }
+
+    @Test func editedSpinesBelowTheFloorAreWidened() async throws {
+        let store = CoverStore(root: root, renderer: CoverRenderer(frontWidth: 120))
+        let seed = CoverFixtures.seed()
+        var design = await store.prepare(seed)
+        design.thickness = 0.04
+        design.isThicknessCustom = true
+        try await store.save(design, image: .keep, for: seed.bookID)
+        let widened = await store.prepare(seed)
+        #expect(widened.thickness == CoverDesign.thicknessRange.lowerBound)
+        #expect(widened.isThicknessCustom == true)
+    }
+
+    @Test func legacyThinAutomaticSpinesStillFollowLength() {
+        let seed = CoverFixtures.seed(wordCount: 2_000)
+        var design = CoverTemplate.classic.makeDesign(seed: seed, palette: .generated(for: "x"), imageSource: .none)
+        design.thickness = 0.04  // the old automatic value for a short work
+        #expect(design.followsBookLength(seed: seed))
+    }
+}
+
