@@ -23,6 +23,9 @@ struct ShelfView: View {
 
     @State private var scene = ShelfScene()
     @State private var viewSize: CGSize = .zero
+    /// Height of the view inside the safe area; the shelf itself runs to
+    /// the bottom edge, under the bottom bar.
+    @State private var safeHeight: CGFloat = 0
     /// The hinge of the open Duo, in this view's points, when it runs top to
     /// bottom. An upright stands over it so no book straddles the fold.
     @State private var fold: CGRect?
@@ -60,6 +63,58 @@ struct ShelfView: View {
     }
 
     var body: some View {
+        // The shelf runs under the bottom bar (the search field on iPhone)
+        // but the book card stays above it, or the bar covers Read and Edit.
+        ZStack(alignment: .bottom) {
+            shelf
+                .ignoresSafeArea(edges: .bottom)
+            if let book = selectedBook {
+                ShelfBookCard(
+                    book: book,
+                    onRead: { open(book) },
+                    onEditCover: onEditCover.map { edit in { edit(book) } },
+                    onDelete: onDelete.map { delete in { select(nil); delete(book) } },
+                    onClose: { select(nil) }
+                )
+                .padding()
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { safeHeight = $0 }
+        .onChange(of: bottomInset) { _, _ in clampScroll() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Show", selection: $mode) {
+                        ForEach(ShelfDisplayMode.allCases) { mode in
+                            Label(mode.displayName, systemImage: mode == .spines ? "books.vertical" : "rectangle.grid.2x2")
+                                .tag(mode)
+                        }
+                    }
+                } label: {
+                    Label("Shelf display", systemImage: mode == .spines ? "books.vertical" : "rectangle.grid.2x2")
+                }
+            }
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: pickups)
+        .sensoryFeedback(.selection, trigger: held?.insertion)
+        .onChange(of: syncKey) { old, new in
+            // Resizes jump; everything else animates.
+            refresh(animated: old.size == new.size)
+        }
+        .onChange(of: reduceMotion) { _, _ in refresh(animated: false) }
+        .onChange(of: zoom) { _, _ in
+            guard viewSize != .zero else { return }
+            let range = scrollRange
+            centerY = range.upperBound
+            scene.setCamera(camera, animated: false)
+            refresh(animated: false)
+        }
+        .task(id: sizeKey) { await loadSizes() }
+    }
+
+    /// The 3D case with its touch, VoiceOver and empty-state layers.
+    private var shelf: some View {
         GeometryReader { proxy in
             ShelfRenderView(scene: scene, background: UIColor(cgColor: ShelfTextures.background.cgColor))
                 .accessibilityHidden(true)
@@ -111,48 +166,6 @@ struct ShelfView: View {
                 .foregroundStyle(.white)
             }
         }
-        .overlay(alignment: .bottom) {
-            if let book = selectedBook {
-                ShelfBookCard(
-                    book: book,
-                    onRead: { open(book) },
-                    onEditCover: onEditCover.map { edit in { edit(book) } },
-                    onDelete: onDelete.map { delete in { select(nil); delete(book) } },
-                    onClose: { select(nil) }
-                )
-                .padding()
-                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Picker("Show", selection: $mode) {
-                        ForEach(ShelfDisplayMode.allCases) { mode in
-                            Label(mode.displayName, systemImage: mode == .spines ? "books.vertical" : "rectangle.grid.2x2")
-                                .tag(mode)
-                        }
-                    }
-                } label: {
-                    Label("Shelf display", systemImage: mode == .spines ? "books.vertical" : "rectangle.grid.2x2")
-                }
-            }
-        }
-        .sensoryFeedback(.impact(weight: .medium), trigger: pickups)
-        .sensoryFeedback(.selection, trigger: held?.insertion)
-        .onChange(of: syncKey) { old, new in
-            // Resizes jump; everything else animates.
-            refresh(animated: old.size == new.size)
-        }
-        .onChange(of: reduceMotion) { _, _ in refresh(animated: false) }
-        .onChange(of: zoom) { _, _ in
-            guard viewSize != .zero else { return }
-            let range = scrollRange
-            centerY = range.upperBound
-            scene.setCamera(camera, animated: false)
-            refresh(animated: false)
-        }
-        .task(id: sizeKey) { await loadSizes() }
     }
 
     // MARK: - State
@@ -225,9 +238,25 @@ struct ShelfView: View {
         return frame
     }
 
+    /// Points at the bottom of the shelf hidden by the bottom bar and the
+    /// home indicator.
+    private var bottomInset: CGFloat {
+        guard safeHeight > 0 else { return 0 }
+        return max(viewSize.height - safeHeight, 0)
+    }
+
+    /// Scrolling stops with the lowest shelf above the bottom bar, not under it.
     private var scrollRange: ClosedRange<Float> {
         let layout = layout(for: order)
-        return ShelfCamera.scrollRange(top: layout.contentTop + layout.metrics.boardThickness, bottom: layout.contentBottom, halfHeight: camera.halfHeight)
+        let hidden = Float(bottomInset) / camera.scale
+        return ShelfCamera.scrollRange(top: layout.contentTop + layout.metrics.boardThickness, bottom: layout.contentBottom - hidden, halfHeight: camera.halfHeight)
+    }
+
+    private func clampScroll() {
+        guard viewSize != .zero else { return }
+        let range = scrollRange
+        centerY = min(max(centerY, range.lowerBound), range.upperBound)
+        scene.setCamera(camera, animated: false)
     }
 
     // MARK: - Scene
@@ -510,24 +539,33 @@ struct ShelfBookCard: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Put back"))
             }
-            HStack {
-                Button(action: onRead) {
-                    Label("Read", systemImage: "book")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                if let onEditCover {
-                    Button(action: onEditCover) {
-                        Label("Edit cover", systemImage: "paintbrush")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                }
+            // Stacked when the card is too narrow (or the text too large)
+            // for both labels on one line.
+            ViewThatFits(in: .horizontal) {
+                HStack { actionButtons }
+                VStack { actionButtons }
             }
             .controlSize(.large)
+            .lineLimit(1)
         }
         .padding()
         .frame(maxWidth: 520)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        Button(action: onRead) {
+            Label("Read", systemImage: "book")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        if let onEditCover {
+            Button(action: onEditCover) {
+                Label("Edit cover", systemImage: "paintbrush")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
     }
 }

@@ -31,25 +31,15 @@ struct CoverImagePanel: View {
             }
             .buttonStyle(.bordered)
 
-            HStack {
-                PhotosPicker(selection: $photo, matching: .images) {
-                    Label("Photos", systemImage: "photo.on.rectangle")
-                        .frame(maxWidth: .infinity)
-                }
-                Button {
-                    showingFiles = true
-                } label: {
-                    Label("Files", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                PasteButton(supportedContentTypes: [.image]) { providers in
-                    paste(providers)
-                }
-                .labelStyle(.titleAndIcon)
-                .buttonBorderShape(.roundedRectangle)
-                .tint(.secondary)
+            // Side by side when the labels fit on one line each; stacked on
+            // narrow panels (the tools half of the open Duo), where three
+            // across squeezed the words into one letter per line.
+            ViewThatFits(in: .horizontal) {
+                HStack { imageSourceButtons }
+                VStack { imageSourceButtons }
             }
             .buttonStyle(.bordered)
+            .lineLimit(1)
 
             if model.hasEmbeddedCover, model.design.imageSource != .embedded {
                 Button {
@@ -154,6 +144,26 @@ struct CoverImagePanel: View {
         case .search(let provider, _):
             String(localized: "From \(CoverSearchProvider(rawValue: provider)?.displayName ?? provider).")
         }
+    }
+
+    @ViewBuilder
+    private var imageSourceButtons: some View {
+        PhotosPicker(selection: $photo, matching: .images) {
+            Label("Photos", systemImage: "photo.on.rectangle")
+                .frame(maxWidth: .infinity)
+        }
+        Button {
+            showingFiles = true
+        } label: {
+            Label("Files", systemImage: "folder")
+                .frame(maxWidth: .infinity)
+        }
+        PasteButton(supportedContentTypes: [.image]) { providers in
+            paste(providers)
+        }
+        .labelStyle(.titleAndIcon)
+        .buttonBorderShape(.roundedRectangle)
+        .tint(.secondary)
     }
 
     private func importFile(_ url: URL) async {
@@ -309,21 +319,12 @@ private struct TextBoxInspector: View {
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...6)
 
-            HStack {
-                Picker("Font", selection: binding(\.font)) {
-                    ForEach(CoverFont.allCases) { font in
-                        Text(font.displayName)
-                            .font(font.familyName.map { Font.custom($0, size: 17) } ?? .body)
-                            .tag(font)
-                    }
-                }
-                Picker("Weight", selection: binding(\.weight)) {
-                    ForEach(CoverFontWeight.allCases) { weight in
-                        Text(weight.displayName).tag(weight)
-                    }
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack { fontPickers }
+                VStack(alignment: .leading) { fontPickers }
             }
             .pickerStyle(.menu)
+            .lineLimit(1)
 
             VStack(alignment: .leading) {
                 Text("Size")
@@ -352,6 +353,22 @@ private struct TextBoxInspector: View {
             Toggle("Run down the spine", isOn: binding(\.isVertical))
             Toggle("Capitals", isOn: binding(\.isUppercased))
             Toggle("Shadow", isOn: binding(\.hasShadow))
+        }
+    }
+
+    @ViewBuilder
+    private var fontPickers: some View {
+        Picker("Font", selection: binding(\.font)) {
+            ForEach(CoverFont.allCases) { font in
+                Text(font.displayName)
+                    .font(font.familyName.map { Font.custom($0, size: 17) } ?? .body)
+                    .tag(font)
+            }
+        }
+        Picker("Weight", selection: binding(\.weight)) {
+            ForEach(CoverFontWeight.allCases) { weight in
+                Text(weight.displayName).tag(weight)
+            }
         }
     }
 
