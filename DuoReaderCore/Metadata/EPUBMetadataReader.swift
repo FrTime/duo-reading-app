@@ -39,7 +39,7 @@ public struct EPUBMetadataReader: MetadataReader {
 
         if let coverHref = package.coverHref {
             let path = Self.resolve(coverHref, relativeTo: base)
-            if let entry = try await archive.get(path), Int64(entry.uncompressedSize) <= Self.maxCoverBytes {
+            if let entry = try await archive.get(path), Int64(clamping: entry.uncompressedSize) <= Self.maxCoverBytes {
                 metadata.coverImageData = try await Self.data(at: path, in: archive, limit: Self.maxCoverBytes)
             }
         }
@@ -74,7 +74,7 @@ public struct EPUBMetadataReader: MetadataReader {
     /// declared size and by what actually inflates (the header can lie).
     static func data(at path: String, in archive: Archive, limit: Int64 = maxDocumentBytes) async throws -> Data? {
         guard let entry = try await archive.get(path) else { return nil }
-        guard Int64(entry.uncompressedSize) <= limit else {
+        guard Int64(clamping: entry.uncompressedSize) <= limit else {
             throw MetadataError.malformed("Entry too large: \(path)")
         }
         let buffer = Mutex(Data())
@@ -153,6 +153,9 @@ struct OPFPackage {
     var metadata = BookMetadata()
     var coverHref: String?
     var spineHrefs: [String] = []
+    /// `rendition:layout` is `pre-paginated`: every spine item is one page
+    /// (comics and other fixed-layout books).
+    var isFixedLayout = false
 }
 
 enum OPFParser {
@@ -176,6 +179,7 @@ enum OPFParser {
         var spine: [String] = []
         var coverID: String?
         var guideCoverHref: String?
+        var isFixedLayout = false
 
         private var text = ""
         private var inMetadata = false
@@ -246,7 +250,9 @@ enum OPFParser {
             case "source": if let v = value.nilIfBlank { metadata.identifiers.append(v) }
             case "meta":
                 if let property = currentProperty, !value.isEmpty {
-                    if property == "belongs-to-collection", let id = currentID {
+                    if property == "rendition:layout", currentRefines == nil {
+                        isFixedLayout = value == "pre-paginated"
+                    } else if property == "belongs-to-collection", let id = currentID {
                         collectionIDs.insert(id)
                         if metadata.series == nil { metadata.series = value }
                     } else if let target = currentRefines {
@@ -267,6 +273,7 @@ enum OPFParser {
 
             var package = OPFPackage(metadata: metadata)
             package.spineHrefs = spine.compactMap { manifest[$0]?.href }
+            package.isFixedLayout = isFixedLayout
 
             // EPUB 3 cover-image property, then the EPUB 2 <meta name="cover">,
             // then any image item whose id or href says "cover".

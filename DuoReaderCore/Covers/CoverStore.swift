@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 ///     Covers/<book id>/front.jpg     rendered faces
 ///     Covers/<book id>/spine.jpg
 ///     Covers/<book id>/back.jpg
+///     Covers/<book id>/pages         the book's measured length (`BookLength`)
 ///
 /// Designs live beside the library store rather than in it, so cover work
 /// never needs a schema change and big images stay out of library queries.
@@ -56,6 +57,12 @@ public actor CoverStore {
         folder(for: bookID).appending(path: "design.json")
     }
 
+    /// Where the book's measured page count is cached. It lives with the
+    /// cover so deleting the book's covers removes it too.
+    public nonisolated func pageCountURL(for bookID: UUID) -> URL {
+        folder(for: bookID).appending(path: "pages")
+    }
+
     nonisolated func sourceURL(for bookID: UUID) -> URL {
         folder(for: bookID).appending(path: "source.img")
     }
@@ -86,6 +93,19 @@ public actor CoverStore {
     /// (`CoverDesign.currentVersion`). Designs the user edited are left alone.
     @discardableResult
     public func prepare(_ seed: CoverSeed) -> CoverDesign {
+        if var existing = design(for: seed.bookID), existing.isUserEdited, seed.pageCount != nil || seed.wordCount != nil,
+           existing.followsBookLength(seed: seed) {
+            // An edited cover whose spine the user never resized keeps up
+            // with the book's measured length.
+            let thickness = CoverDesign.thickness(for: seed)
+            if abs(existing.thickness - thickness) > 1e-6 || existing.isThicknessCustom == nil {
+                existing.thickness = thickness
+                existing.isThicknessCustom = false
+                let image = sourceImageData(for: seed.bookID).flatMap { Self.decodeImage($0, maxPixels: Self.maxSourcePixels) }
+                try? write(design: existing, image: .keep, rendered: renderer.render(design: existing, image: image), for: seed.bookID)
+                return existing
+            }
+        }
         if let existing = design(for: seed.bookID),
            existing.isUserEdited
             || (existing.seedFingerprint == seed.fingerprint && existing.version >= CoverDesign.currentVersion) {

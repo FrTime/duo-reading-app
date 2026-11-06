@@ -188,8 +188,9 @@ public enum CoverImageSource: Codable, Hashable, Sendable {
 /// stored next to the design as a file, not inside it.
 public struct CoverDesign: Codable, Hashable, Sendable {
     /// Raised when the default layouts change, so automatic designs made
-    /// with older ones are rebuilt. 2: larger spine author text.
-    public static let currentVersion = 2
+    /// with older ones are rebuilt. 2: larger spine author text. 3: spine
+    /// thickness from every book's measured length, not just AO3 word counts.
+    public static let currentVersion = 3
 
     /// The width-to-height ratio of every front cover.
     public static let frontAspectRatio = 2.0 / 3.0
@@ -225,6 +226,10 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// Fit the whole image on the front (over a blurred copy of itself)
     /// instead of filling and cropping. Nil means fill.
     public var fitsWholeImage: Bool?
+    /// True once the user sets the spine thickness by hand. Otherwise the
+    /// thickness follows the book's length, even on an edited cover. Nil in
+    /// designs saved before this existed (see `followsBookLength(seed:)`).
+    public var isThicknessCustom: Bool?
 
     public init(
         template: CoverTemplate,
@@ -260,19 +265,32 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// Book sizes the user can pick, relative to a standard paperback.
     public static let heightScaleRange = 0.8...1.15
 
-    /// The book's size: the user's choice, or a small, stable variation per
-    /// book so a shelf isn't a row of identical blocks.
-    public func sizeScale(for bookID: UUID) -> Double {
+    /// The book's size: the user's choice, or a small, stable variation so a
+    /// shelf isn't a row of identical blocks. Books in one series (same
+    /// `seriesKey`) share their variation, like a boxed set.
+    public func sizeScale(for bookID: UUID, seriesKey: String? = nil) -> Double {
         if let heightScale {
             return min(max(heightScale, Self.heightScaleRange.lowerBound), Self.heightScaleRange.upperBound)
         }
-        return Self.defaultHeightScale(for: bookID)
+        return Self.defaultHeightScale(for: bookID, seriesKey: seriesKey)
     }
 
-    /// 0.93 to 1.05, picked from the book's ID so it never changes.
-    public static func defaultHeightScale(for bookID: UUID) -> Double {
-        let bytes = bookID.uuid
-        let value = (Int(bytes.0) << 8 | Int(bytes.1)) % 1000
+    /// 0.93 to 1.05, picked from the series key when there is one, else the
+    /// book's ID, so it never changes.
+    public static func defaultHeightScale(for bookID: UUID, seriesKey: String? = nil) -> Double {
+        let value: Int
+        if let seriesKey, !seriesKey.isEmpty {
+            // FNV-1a: stable across launches, unlike `hashValue`.
+            var hash: UInt64 = 0xcbf29ce484222325
+            for byte in seriesKey.utf8 {
+                hash ^= UInt64(byte)
+                hash = hash &* 0x100000001b3
+            }
+            value = Int(hash % 1000)
+        } else {
+            let bytes = bookID.uuid
+            value = (Int(bytes.0) << 8 | Int(bytes.1)) % 1000
+        }
         return 0.93 + Double(value) / 999 * 0.12
     }
 
@@ -281,9 +299,35 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     }
 
     /// Spine width as a fraction of the front's width, from an estimated page
-    /// count. A 300-page paperback comes out at about 0.12.
+    /// count. A 300-page paperback comes out at 0.12. Up to 600 pages it
+    /// grows in step with the length; past that it eases toward the thickest
+    /// spine, so a 1,000-page book and a 3,000-page one still look different.
     public static func thickness(forPageCount pages: Int) -> Double {
-        let value = 0.02 + Double(max(pages, 0)) / 300 * 0.10
+        let pages = Double(max(pages, 0))
+        let knee = 600.0
+        let linear = 0.02 + min(pages, knee) / 300 * 0.10
+        var value = linear
+        if pages > knee {
+            let headroom = thicknessRange.upperBound - linear
+            value += headroom * (1 - exp(-(pages - knee) / 1200))
+        }
         return min(max(value, thicknessRange.lowerBound), thicknessRange.upperBound)
+    }
+
+    /// The thickness the book's length gives.
+    public static func thickness(for seed: CoverSeed) -> Double {
+        thickness(forPageCount: seed.estimatedPageCount)
+    }
+
+    /// Whether the thickness should follow the book's length rather than stay
+    /// as it is. True unless the user set it by hand. Designs saved before
+    /// that was recorded count as following it when they still have the
+    /// thickness the old automatic sizing gave (300 pages, or the AO3 word
+    /// count on the old straight-line scale), since a slider rarely lands there.
+    public func followsBookLength(seed: CoverSeed) -> Bool {
+        if let isThicknessCustom { return !isThicknessCustom }
+        let legacyPages = seed.wordCount.flatMap { $0 > 0 ? max($0 / BookLength.wordsPerPage, 8) : nil } ?? 300
+        let legacy = min(max(0.02 + Double(legacyPages) / 300 * 0.10, Self.thicknessRange.lowerBound), Self.thicknessRange.upperBound)
+        return abs(thickness - legacy) < 1e-6
     }
 }

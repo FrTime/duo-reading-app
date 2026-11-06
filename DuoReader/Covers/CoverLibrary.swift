@@ -18,6 +18,9 @@ final class CoverLibrary {
     private var revisions: [UUID: Int] = [:]
     private let images = NSCache<NSString, UIImage>()
     @ObservationIgnored private var designs: [UUID: CoverDesign] = [:]
+    /// Designs being prepared, so the shelf and a cover image asking for the
+    /// same book at once measure and render it only once.
+    @ObservationIgnored private var pending: [UUID: Task<CoverDesign, Never>] = [:]
 
     init(store: CoverStore) {
         self.store = store
@@ -38,8 +41,15 @@ final class CoverLibrary {
     /// Call `metadataDidChange(for:)` after re-importing a book.
     func design(for book: Book) async -> CoverDesign {
         if let cached = designs[book.id] { return cached }
-        let design = await store.prepare(Self.seed(for: book))
-        designs[book.id] = design
+        let id = book.id
+        if let task = pending[id] { return await task.value }
+        let task = Task { await store.prepare(measuredSeed(for: book)) }
+        pending[id] = task
+        let design = await task.value
+        pending[id] = nil
+        // A save or reset while this was in flight wins.
+        if let newer = designs[id] { return newer }
+        designs[id] = design
         return design
     }
 
@@ -47,7 +57,7 @@ final class CoverLibrary {
     /// the user edited aren't touched.
     func metadataDidChange(for book: Book) async {
         let previous = designs[book.id]
-        let design = await store.prepare(Self.seed(for: book))
+        let design = await store.prepare(measuredSeed(for: book))
         designs[book.id] = design
         if previous != design { bump(book.id) }
     }
@@ -94,7 +104,7 @@ final class CoverLibrary {
 
     /// Throws away the user's edits and goes back to the default cover.
     func resetToDefault(for book: Book) async {
-        let design = await store.reset(Self.seed(for: book))
+        let design = await store.reset(measuredSeed(for: book))
         designs[book.id] = design
         bump(book.id)
     }
@@ -128,6 +138,19 @@ final class CoverLibrary {
             return try? context.fetch(descriptor).first?.coverSeed
         }.value
         return seed ?? book.coverSeed
+    }
+
+    /// The cover seed plus the book's measured length, for its spine. The
+    /// length is measured once (reading the file) and cached beside the cover.
+    func measuredSeed(for book: Book) async -> CoverSeed {
+        var seed = await Self.seed(for: book)
+        let file = LibraryActions.fileURL(for: book)
+        let format = book.format
+        let cache = store.pageCountURL(for: book.id)
+        seed.pageCount = await Task.detached(priority: .userInitiated) {
+            await BookLength.cachedPageCount(of: file, format: format, cache: cache)
+        }.value
+        return seed
     }
 
     private func bump(_ bookID: UUID) {

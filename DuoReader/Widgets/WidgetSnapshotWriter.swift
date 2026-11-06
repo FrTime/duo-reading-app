@@ -14,7 +14,7 @@ final class WidgetSnapshotWriter {
     /// What the writer needs from a book's cover design.
     struct CoverInfo: Sendable {
         var thickness: Double
-        /// Relative size on the shelf. 1 until the cover editor adds per-book sizes.
+        /// Relative size on the shelf (`CoverDesign.sizeScale`).
         var sizeScale: Double = 1
         var baseColor: RGBAColor
         var spineColor: RGBAColor
@@ -205,6 +205,7 @@ final class WidgetSnapshotWriter {
         let fm = FileManager.default
         return CoverInfo(
             thickness: design.thickness,
+            sizeScale: design.sizeScale(for: book.id, seriesKey: book.seriesKey),
             baseColor: design.baseColor,
             spineColor: design.spineColor,
             frontURL: fm.fileExists(atPath: front.path(percentEncoded: false)) ? front : nil,
