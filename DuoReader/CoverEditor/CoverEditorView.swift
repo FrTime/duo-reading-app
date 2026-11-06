@@ -12,6 +12,8 @@ struct CoverEditorView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var confirmingDiscard = false
     @State private var confirmingReset = false
+    @State private var panelPickerWidth: CGFloat = .infinity
+    @State private var panelNamesWidth: CGFloat = 0
 
     init(book: Book) {
         _model = State(initialValue: CoverEditorModel(book: book))
@@ -25,10 +27,12 @@ struct CoverEditorView: View {
                     // tools on the right, with nothing on the hinge. Landscape
                     // on the closed Duo is side by side too: stacked, the
                     // cover shrank to a thumbnail and the tools to a sliver.
+                    // There the tools get the wider share: the cover is
+                    // tall and narrow, and fits in less.
                     let fold = Self.usableFold(in: proxy)
                     HStack(spacing: 0) {
                         stageArea
-                            .frame(width: fold?.minX ?? proxy.size.width * 0.55)
+                            .frame(width: fold?.minX ?? proxy.size.width * (sizeClass == .regular ? 0.55 : 0.45))
                         Divider()
                             .frame(width: fold?.width ?? 1)
                         panelArea
@@ -110,13 +114,28 @@ struct CoverEditorView: View {
 
     private var panelArea: some View {
         VStack(spacing: 0) {
-            Picker("Tools", selection: $model.panel) {
-                ForEach(CoverEditorModel.Panel.allCases) { panel in
-                    Label(panel.title, systemImage: panel.systemImage).tag(panel)
+            // Names when they fit; icons on narrow panels (landscape on the
+            // closed Duo), where the equal-width segments cut "Template"
+            // short.
+            panelPicker(iconsOnly: panelNamesWidth > panelPickerWidth)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelPickerWidth = $0 }
+                .background {
+                    // The names side by side at the segmented control's
+                    // text size, plus each segment's padding, measured out
+                    // of sight. (A fixed-size copy of the picker itself
+                    // overstates it: it sizes every segment to the widest.)
+                    HStack(spacing: 0) {
+                        ForEach(CoverEditorModel.Panel.allCases) { panel in
+                            Text(panel.title)
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 10)
+                        }
+                    }
+                    .fixedSize()
+                    .hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelNamesWidth = $0 }
                 }
-            }
-            .pickerStyle(.segmented)
-            .padding()
+                .padding()
 
             ScrollView {
                 Group {
@@ -135,6 +154,23 @@ struct CoverEditorView: View {
             .disabled(!model.isLoaded)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func panelPicker(iconsOnly: Bool) -> some View {
+        Picker("Tools", selection: $model.panel) {
+            ForEach(CoverEditorModel.Panel.allCases) { panel in
+                Group {
+                    if iconsOnly {
+                        Image(systemName: panel.systemImage)
+                            .accessibilityLabel(Text(panel.title))
+                    } else {
+                        Text(panel.title)
+                    }
+                }
+                .tag(panel)
+            }
+        }
+        .pickerStyle(.segmented)
     }
 
     @ToolbarContentBuilder
