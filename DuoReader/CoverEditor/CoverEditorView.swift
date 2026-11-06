@@ -120,11 +120,20 @@ struct CoverEditorView: View {
             panelPicker(iconsOnly: panelNamesWidth > panelPickerWidth)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelPickerWidth = $0 }
                 .background {
-                    // The names at their natural width, measured out of sight.
-                    panelPicker(iconsOnly: false)
-                        .fixedSize()
-                        .hidden()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelNamesWidth = $0 }
+                    // The names side by side at the segmented control's
+                    // text size, plus each segment's padding, measured out
+                    // of sight. (A fixed-size copy of the picker itself
+                    // overstates it: it sizes every segment to the widest.)
+                    HStack(spacing: 0) {
+                        ForEach(CoverEditorModel.Panel.allCases) { panel in
+                            Text(panel.title)
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 10)
+                        }
+                    }
+                    .fixedSize()
+                    .hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { panelNamesWidth = $0 }
                 }
                 .padding()
 
