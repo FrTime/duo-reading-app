@@ -227,12 +227,12 @@ struct LengthOnEditedCoversTests {
         #expect(followed.isThicknessCustom == false)
 
         var resized = followed
-        resized.thickness = 0.05
+        resized.thickness = 0.09
         resized.isThicknessCustom = true
         try await store.save(resized, image: .keep, for: seed.bookID)
         seed.pageCount = 100
         let kept = await store.prepare(seed)
-        #expect(abs(kept.thickness - 0.05) < 1e-9)
+        #expect(abs(kept.thickness - 0.09) < 1e-9)
     }
 }
 

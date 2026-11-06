@@ -338,7 +338,6 @@ public struct CoverDesign: Codable, Hashable, Sendable {
     /// count on the old straight-line scale), since a slider rarely lands there.
     public func followsBookLength(seed: CoverSeed) -> Bool {
         if let isThicknessCustom { return !isThicknessCustom }
-        if abs(thickness - Self.thicknessRange.lowerBound) < 1e-6 { return true }
         let legacyPages = seed.wordCount.flatMap { $0 > 0 ? max($0 / BookLength.wordsPerPage, 8) : nil } ?? 300
         let legacy = min(max(0.02 + Double(legacyPages) / 300 * 0.10, Self.legacyMinimumThickness), Self.thicknessRange.upperBound)
         return abs(thickness - legacy) < 1e-6
